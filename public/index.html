@@ -13,6 +13,7 @@
     <link rel="preconnect" href="https://www.apple.com.cn" crossorigin />
     <link rel="stylesheet" href="./fonts.css" />
     <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./astra-entry.css" />
     <script type="module" src="./app.js"></script>
   </head>
   <body>
@@ -28,6 +29,7 @@
       <nav aria-label="主导航">
         <a href="#overview">实时概览</a><a href="#funds">ETF 明细</a
         ><a href="#methodology">数据口径 <span>↗</span></a>
+        <a class="astra-nav" href="http://127.0.0.1:8876/" target="_blank" rel="noopener noreferrer" title="在已配置的本机 Windows 上打开">Astra 控制台 <span>↗</span></a>
       </nav>
       <a
         class="github-link"
@@ -262,6 +264,11 @@
       </section>
 
       <section id="methodology" class="methodology card">
+        <a class="astra-entry" href="http://127.0.0.1:8876/" target="_blank" rel="noopener noreferrer" aria-label="打开本机 Astra 私人投资控制台">
+          <div class="astra-entry-icon" aria-hidden="true">✳</div>
+          <div class="astra-entry-copy"><span>ASTRA / PRIVATE CONSOLE</span><h2>你的投资工作台。</h2><p>流程报告 · 投资组合 · 交易流水 · 一键执行</p><small>密码保护 · 模拟账户 · 在已配置的 Windows 电脑上打开</small></div>
+          <div class="astra-entry-action">进入控制台 <span>↗</span></div>
+        </a>
         <div class="method-heading">
           <div>
             <p class="section-kicker">TRANSPARENT BY DESIGN</p>
