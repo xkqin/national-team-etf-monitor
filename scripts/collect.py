@@ -19,7 +19,7 @@ def request(url, timeout=12, attempts=2):
         try:
             req = urllib.request.Request(url, headers={
                 "User-Agent": "Mozilla/5.0 ETF-Observation/1.0",
-                "Referer": "https://quote.eastmoney.com/",
+                "Referer": "https://gu.qq.com/" if "gtimg.cn/" in url else "https://quote.eastmoney.com/",
             })
             with urllib.request.urlopen(req, timeout=timeout) as response:
                 raw = response.read()
@@ -78,24 +78,28 @@ def minute_bars(fund):
     return date, bars
 
 
+def archive_rows(fund, period, limit):
+    market = "1" if fund["symbol"].startswith("sh") else "0"
+    url = ("https://push2his.eastmoney.com/api/qt/stock/kline/get?"
+           f"secid={market}.{fund['code']}&fqt=0&end=20500101&klt={period}&lmt={limit}"
+           "&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57")
+    payload = json.loads(request(url))
+    lines = (payload.get("data") or {}).get("klines", [])
+    if not lines:
+        raise ValueError("Empty archive response")
+    rows = [line.split(",") for line in lines]
+    return [[row[0], float(row[6]), float(row[2])] for row in rows]
+
+
 def history_for(fund, previous, fields, refresh_archive=False):
     result = {
         "daily": previous.get("daily", []),
         "fiveMinute": previous.get("fiveMinute", []),
     }
     if refresh_archive or not all(result.values()):
-        market = "1" if fund["symbol"].startswith("sh") else "0"
-        base = ("https://push2his.eastmoney.com/api/qt/stock/kline/get?"
-                f"secid={market}.{fund['code']}&fqt=0&end=20500101"
-                "&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57")
         for key, period, limit in [("daily", 101, 280), ("fiveMinute", 5, 1100)]:
             try:
-                payload = json.loads(request(f"{base}&klt={period}&lmt={limit}"))
-                lines = (payload.get("data") or {}).get("klines", [])
-                if not lines:
-                    raise ValueError("Empty archive response")
-                rows = [line.split(",") for line in lines]
-                result[key] = [[row[0], float(row[6]), float(row[2])] for row in rows]
+                result[key] = archive_rows(fund, period, limit)
             except Exception as error:
                 result.setdefault("errors", []).append(f"{key}: {type(error).__name__}")
     if fields:
@@ -109,7 +113,15 @@ def history_for(fund, previous, fields, refresh_archive=False):
             retained = [row for row in result["fiveMinute"] if row[0][:10] != date]
             result["fiveMinute"] = sorted(retained + bars)[-1100:]
     except Exception as error:
-        result.setdefault("errors", []).append(f"minute: {type(error).__name__}")
+        try:
+            result["fiveMinute"] = archive_rows(fund, 5, 1100)
+        except Exception:
+            result.setdefault("errors", []).append(f"minute: {type(error).__name__}")
+    if fields:
+        minute = int(fields[30][8:10]) * 60 + int(fields[30][10:12])
+        completed = 900 if minute >= 900 else 690 if 690 <= minute <= 780 else (minute - 1) // 5 * 5
+        cutoff = f"{completed // 60:02d}:{completed % 60:02d}"
+        result["fiveMinute"] = [row for row in result["fiveMinute"] if row[0][:10] < date or (row[0][:10] == date and row[0][11:16] <= cutoff)]
     return fund["symbol"], result
 
 
