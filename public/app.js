@@ -12,7 +12,7 @@ import {
   minuteShape,
   sessionPhase,
   LIVE_MIN_MINUTE,
-} from "./core.js?v=20261106c";
+} from "./core.js?v=20261106d";
 
 // Minute lines change once a minute; the chart's live tip moves every second from the quotes.
 const MINUTE_MS = 60_000;
@@ -514,7 +514,7 @@ function renderHero(view) {
         ? "今日结论 · 实时跟踪"
         : `今日结论 · ${market.label}`
       : `${summary.date} 结论 · 最近交易日`;
-  $("question").textContent = today || !summary.date ? "国家队今天进场了吗？" : `国家队 ${summary.date.slice(5).replace("-", " 月 ")} 日进场了吗？`;
+  $("question").textContent = today || !summary.date ? "汪汪队今天进场了吗？" : `汪汪队 ${summary.date.slice(5).replace("-", " 月 ")} 日进场了吗？`;
   $("eyebrow-dot").className = `live-dot ${market.session && market.fresh ? "live" : ""}`;
   const headline = signal.headline.replace(/。$/, "");
   const element = $("conclusion-headline");
@@ -538,8 +538,8 @@ function renderHero(view) {
   renderEvidence(view.evidence);
   renderStatus();
   document.title = finite(summary.ratio)
-    ? `${times(summary.ratio)} ${headline} · 国家队 ETF 观察站`
-    : "国家队 ETF 观察站 · 盘中实时";
+    ? `${times(summary.ratio)} ${headline} · 汪汪队 ETF 观察站`
+    : "汪汪队 ETF 观察站 · 盘中实时";
 }
 
 // Status pill + timestamp, refreshed every second without re-rendering the page.
