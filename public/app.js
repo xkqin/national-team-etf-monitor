@@ -13,7 +13,7 @@ import {
   sessionPhase,
   tradingMinute,
   LIVE_MIN_MINUTE,
-} from "./core.js?v=20261106e";
+} from "./core.js?v=20261106f";
 
 // Minute lines change once a minute; the chart's live tip moves every second from the quotes.
 const MINUTE_MS = 60_000;
@@ -78,6 +78,7 @@ const state = {
   minuteLoading: false,
   shape: null,
   shapeLoading: false,
+  sourceStatus: {},
   holiday: "",
   quoteSignature: "",
   hover: null,
@@ -311,10 +312,16 @@ async function fetchMinute(symbol, attempt = 0) {
   let lastError;
   for (const name of order) {
     try {
-      return await (name === "tencent" ? minuteFromTencent(symbol) : minuteFromEastmoney(symbol));
+      const result = await (name === "tencent" ? minuteFromTencent(symbol) : minuteFromEastmoney(symbol));
+      state.sourceStatus[name] = { ok: Date.now(), error: state.sourceStatus[name]?.error || "" };
+      return result;
     } catch (error) {
       lastError = error;
       sourceFailed(name);
+      // fetch() rejects with a bare TypeError when CORS, an extension or the network blocks it.
+      const reason =
+        error.name === "TimeoutError" ? "请求超时" : error.name === "TypeError" ? "请求被拦截（跨域 / 扩展 / 网络）" : error.message || "失败";
+      state.sourceStatus[name] = { ok: state.sourceStatus[name]?.ok || 0, error: reason, at: Date.now() };
     }
   }
   throw lastError;
@@ -399,7 +406,37 @@ function buildView() {
       used.push(fund.symbol);
     }
   }
-  const series = used.length ? poolMinutes(minuteMap, profiles, used, shape) : [];
+  let series = used.length ? poolMinutes(minuteMap, profiles, used, shape) : [];
+  let coarse = false;
+  // Last resort: both minute feeds unavailable in this browser → today's five-minute bars from
+  // the cloud snapshot (refreshed by Actions every five minutes during the session).
+  if (!series.length && date) {
+    const barMap = {};
+    for (const fund of state.pool) {
+      let cumulative = 0;
+      const records = (state.history[fund.symbol]?.fiveMinute || [])
+        .filter(([time]) => time.slice(0, 10) === date)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([time, amount, price]) => {
+          cumulative += amount;
+          const clock = time.slice(11, 16);
+          return { clock, minute: tradingMinute(clock), price, cumulative, amount };
+        });
+      if (records.length) barMap[fund.symbol] = records;
+    }
+    const barSymbols = state.pool.map((fund) => fund.symbol).filter((symbol) => barMap[symbol]);
+    if (barSymbols.length === state.pool.length) {
+      series = poolMinutes(barMap, profiles, barSymbols, null).map((point) => ({
+        ...point,
+        expected: point.expected === null ? null : point.expected * 5,
+        multiple: point.expected ? point.amount / (point.expected * 5) : null,
+        pulse: false,
+        strong: false,
+      }));
+      used.splice(0, used.length, ...barSymbols);
+      coarse = series.length > 0;
+    }
+  }
   const indexMinutes = state.minutes[CHART_INDEX]?.date === date ? state.minutes[CHART_INDEX].records : [];
   const hs300 = indexQuote(CHART_INDEX);
   const indexPrev = hs300?.prev;
@@ -469,7 +506,7 @@ function buildView() {
         : "等待逐分钟数据",
     },
   ];
-  return { summary, market, signal, profiles, shape, series, used, indexMinutes, hs300, events, groups, core, skew, buyPulses, defensePulses, evidence };
+  return { summary, market, signal, profiles, shape, series, coarse, used, indexMinutes, hs300, events, groups, core, skew, buyPulses, defensePulses, evidence };
 }
 
 /* ---------------- Render ---------------- */
@@ -769,7 +806,9 @@ function renderAlerts(view) {
     else alerts.push(`${baselineMissing} 只 ETF 历史基线不足，放大倍数暂缓。`);
   }
   // Only warn when the chart is actually behind, not on a single throttled request.
-  if (state.lastMinute && !state.minuteLoading) {
+  if (view.coarse) {
+    alerts.push("腾讯 / 东方财富逐分钟接口在此浏览器都取不到，盘中走势暂用云端快照的 5 分钟线（约 5–15 分钟延迟，末端仍按实时行情每秒更新）。");
+  } else if (state.lastMinute && !state.minuteLoading) {
     const stale = staleMinuteFunds(summary);
     if (stale.length && summary.rows.length)
       alerts.push(`${stale.length} 只 ETF 的分时暂未更新到最新（行情源临时限流），图表这几只沿用上一分钟，会自动补齐；成交额与放大倍数不受影响。`);
@@ -788,9 +827,16 @@ function renderChart() {
   if (!view) return;
   const { series, used, summary, profiles, indexMinutes, hs300 } = view;
   if (!series.length) {
-    container.innerHTML = `<div class="chart-empty">${summary.date ? "等待逐分钟数据" : "等待行情"}<small>分时每 60 秒更新，腾讯 / 东方财富互为备份</small></div>`;
+    const status = (name, label) => {
+      const item = state.sourceStatus[name];
+      if (!item) return `${label}：尚未请求`;
+      if (item.ok && (!item.at || item.ok > item.at)) return `${label}：正常`;
+      return `${label}：${item.error || "失败"}`;
+    };
+    const tried = state.lastMinute > 0;
+    container.innerHTML = `<div class="chart-empty">${!summary.date ? "等待行情" : tried && !state.minuteLoading ? "逐分钟数据暂不可用" : "正在获取逐分钟数据…"}<small>${escape(status("tencent", "腾讯分时"))} · ${escape(status("eastmoney", "东方财富分时"))}</small><small>两路都失败时改用云端快照的 5 分钟线（${state.snapshotLoaded ? "快照中暂无今日数据" : "快照加载中"}）</small></div>`;
     chartState = null;
-    $("intraday-foot").textContent = "逐分钟数据来自腾讯分时，浏览器直连。";
+    $("intraday-foot").textContent = "逐分钟数据：腾讯分时 → 东方财富分时 → 云端快照 5 分钟线，依次兜底，浏览器直连。";
     return;
   }
   const width = Math.max(300, Math.round(container.clientWidth || 800));
@@ -855,7 +901,7 @@ function renderChart() {
     [0, 0.5, 1].map((t) => `<line class="grid" x1="${m.l}" x2="${width - m.r}" y1="${f(y + h * t)}" y2="${f(y + h * t)}"/>`).join("");
   svg += panel(yA, hA, "沪深300 指数 · 较昨收");
   svg += panel(yB, hB, "全池累计成交额 · 亿元");
-  svg += panel(yC, hC, "每分钟成交额 · 亿元");
+  svg += panel(yC, hC, view.coarse ? "每 5 分钟成交额 · 亿元" : "每分钟成交额 · 亿元");
   // Axis labels
   const axis = (y, text) => `<text class="axis" x="${m.l - 6}" y="${f(y + 3.5)}" text-anchor="end">${text}</text>`;
   svg += axis(yA, pct(hi, 1)) + axis(yA + hA, pct(lo, 1));
@@ -902,7 +948,7 @@ function renderChart() {
   }
 
   // C: per-minute bars + expected line
-  const barW = Math.max(1, (iw / 240) * 0.72);
+  const barW = Math.max(1, (iw / 240) * (view.coarse ? 3.6 : 0.72));
   series.forEach((p) => {
     const color = p.pulse ? (p.move >= 0 ? "var(--up)" : "var(--down)") : "#c9d3df";
     const top = yMin(p.amount);
@@ -938,7 +984,9 @@ function renderChart() {
   if (state.hover) onChartMove({ ...state.hover, currentTarget: hit });
 
   const pulses = series.filter((p) => p.pulse).length;
-  const sources = [...new Set(used.map((symbol) => state.minutes[symbol]?.source).filter(Boolean))].join(" / ");
+  const sources = view.coarse
+    ? "云端快照 5 分钟线（腾讯 / 东方财富分时在此浏览器均不可用）"
+    : [...new Set(used.map((symbol) => state.minutes[symbol]?.source).filter(Boolean))].join(" / ");
   $("intraday-foot").textContent =
     `${summary.date} · 分时源 ${sources || "—"}${view.shape ? ` · 分钟形状 ${view.shape.days} 组样本` : " · 线性插值"} · 逐分钟至 ${last.clock}${tip ? `（末端为 ${summary.clock} 实时行情）` : ""} · 分时覆盖 ${used.length}/${state.pool.length} 只 · 全池放量脉冲 ${pulses} 次（≥ 同时段均值 3× 且 ≥ 1 亿）· 灰色虚线为同时点均值`;
 }

@@ -452,6 +452,17 @@ test("Eastmoney and Tencent minute feeds produce the same aligned records", () =
   assert.equal(poolMinutes({ a: tencent, b: eastmoney.slice(0, 3) }, { a: profile, b: profile }, ["a", "b"]).length, 3);
 });
 
+test("a thin fund with missing minutes cannot blank or truncate the pool series", () => {
+  const full = parseMinuteLines(["0930 4 1 100", "0931 4 2 300", "0932 4.1 3 600", "0933 4.1 4 700"]);
+  // No auction trade (no 09:30 line) and no trade at 09:32.
+  const thin = parseMinuteLines(["0931 1 1 50", "0933 1.01 2 80"]);
+  const profile = { points: Array.from({ length: 49 }, (_, i) => i * 5e7), days: 20, fullDay: 48 * 5e7 };
+  const series = poolMinutes({ a: full, b: thin }, { a: profile, b: profile }, ["a", "b"]);
+  assert.deepEqual(series.map((p) => p.clock), ["09:30", "09:31", "09:32", "09:33"]);
+  assert.deepEqual(series.map((p) => p.cumulative), [100, 350, 650, 780]);
+  assert.deepEqual(series.map((p) => p.amount), [100, 250, 300, 130]);
+});
+
 test("post-close fixed-price lines are excluded from the session minutes", () => {
   const records = parseMinuteLines(["1459 4 1 100", "1500 4 2 200", "1505 4 3 300", "1530 4 4 400"]);
   assert.equal(records.at(-1).clock, "15:00");

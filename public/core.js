@@ -360,13 +360,19 @@ export const PULSE = { multiple: 3, strong: 5, minAmount: 1e8, fundMultiple: 4, 
 export function poolMinutes(minuteMap, profiles, symbols, shape = null) {
   const series = symbols.map((symbol) => minuteMap[symbol] || []);
   if (!series.length || series.some((items) => !items.length)) return [];
-  // Align by clock, not by position: stop at the first minute some fund has not reported.
-  const positions = series.map((items) => new Map(items.map((record, i) => [record.clock, i])));
+  // Align by clock over the union of reported minutes, up to the latest minute every fund has
+  // reached. A minute one fund skipped (no trade, or a feed gap) carries its cumulative turnover
+  // forward with zero turnover, so one thin ETF can no longer blank or truncate the pool.
+  const maps = series.map((items) => new Map(items.map((record) => [record.clock, record])));
+  const end = series.map((items) => items.at(-1).clock).sort()[0];
+  const clocks = [...new Set(series.flatMap((items) => items.map((record) => record.clock)))]
+    .filter((clock) => clock <= end)
+    .sort();
+  const carry = series.map(() => ({ cumulative: 0, price: null }));
   const output = [];
-  for (let index = 0; index < series[0].length; index++) {
-    const clock = series[0][index].clock;
-    if (positions.some((map) => !map.has(clock))) break;
-    const minute = series[0][index].minute;
+  for (let index = 0; index < clocks.length; index++) {
+    const clock = clocks[index];
+    const minute = tradingMinute(clock);
     let cumulative = 0;
     let amount = 0;
     let expected = 0;
@@ -374,18 +380,21 @@ export function poolMinutes(minuteMap, profiles, symbols, shape = null) {
     let move = 0;
     let expectedReady = true;
     series.forEach((items, fundIndex) => {
-      const position = positions[fundIndex].get(clock);
-      const record = items[position];
+      const found = maps[fundIndex].get(clock);
+      const state = carry[fundIndex];
+      const record = found || { cumulative: state.cumulative, amount: 0, price: state.price };
       cumulative += record.cumulative;
       amount += record.amount;
       const fundExpected = expectedMinuteAmount(profiles[symbols[fundIndex]], minute, shape);
       if (fundExpected === null) expectedReady = false;
       else expected += fundExpected;
-      const prior = position ? items[position - 1].price : null;
-      if (prior && record.amount > 0) {
+      const prior = state.price;
+      if (prior && record.price && record.amount > 0) {
         move += (record.price / prior - 1) * record.amount;
         moveWeight += record.amount;
       }
+      state.cumulative = record.cumulative;
+      if (record.price) state.price = record.price;
     });
     const multiple = expectedReady && expected > 0 ? amount / expected : null;
     const auction = isAuctionMinute(clock, minute, index, shape);
