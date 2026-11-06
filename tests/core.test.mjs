@@ -10,7 +10,41 @@ import {
   marketState,
   aggregate,
   signalFor,
+  minuteToFiveMinute,
 } from "../public/core.js";
+
+test("Tencent cumulative amounts convert to equivalent five-minute turnover", () => {
+  const bars = minuteToFiveMinute("20261106", [
+    "0930 4.113 260099 106978719.00",
+    "0935 4.130 2565750 1055320056.00",
+    "0940 4.125 3118775 1283640833.00",
+  ]);
+  assert.deepEqual(bars, [
+    ["2026-11-06 09:35", 1055320056, 4.13],
+    ["2026-11-06 09:40", 228320777, 4.125],
+  ]);
+});
+
+test("missing minute endpoints cannot shift volume into later intervals", () => {
+  const bars = minuteToFiveMinute("20261106", ["0935 4 1 100", "0945 4 2 300"]);
+  assert.equal(bars.length, 1);
+  assert.equal(bars[0][1], 100);
+});
+
+test("delayed volume history suppresses current composite signals", () => {
+  const result = signalFor(
+    {
+      complete: true,
+      coherent: true,
+      ratio: 2,
+      flow: 100,
+      amount: 200,
+      comparisonLagMinutes: 15,
+    },
+    { session: true, fresh: true },
+  );
+  assert.equal(result.label, "量能延迟");
+});
 
 const fund = {
   symbol: "sh510300",

@@ -1,5 +1,30 @@
 export const REFRESH_MS = 20_000;
 export const STALE_MS = 180_000;
+export const BAR_TIMES = Array.from({ length: 48 }, (_, index) => {
+  const minutes = index < 24 ? 575 + index * 5 : 785 + (index - 24) * 5;
+  return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+});
+
+export function minuteToFiveMinute(date, lines) {
+  if (!/^\d{8}$/.test(date || "")) throw new Error("分时日期无效");
+  const records = new Map(
+    (lines || []).map((line) => {
+      const [time, price, , amount] = line.trim().split(/\s+/);
+      return [time, { price: Number(price), amount: Number(amount) }];
+    }),
+  );
+  const day = `${date.slice(0, 4)}-${date.slice(4, 6)}-${date.slice(6, 8)}`;
+  let previous = 0;
+  const bars = [];
+  for (const time of BAR_TIMES) {
+    const record = records.get(time.replace(":", ""));
+    if (!record || !Number.isFinite(record.amount) || record.amount < previous)
+      break;
+    bars.push([`${day} ${time}`, record.amount - previous, record.price]);
+    previous = record.amount;
+  }
+  return bars;
+}
 
 export function chinaNow(date = new Date()) {
   return new Date(date.getTime() + 8 * 3600_000)
@@ -208,6 +233,13 @@ export function aggregate(funds, quotes, history) {
     baseline,
     comparedAmount,
     cutoff: comparable ? comparisons[0].cutoff : null,
+    comparisonLagMinutes: commonCutoff
+      ? Math.max(
+          0,
+          BAR_TIMES.findLastIndex((time) => time <= expectedCutoff) -
+            BAR_TIMES.indexOf(commonCutoff),
+        ) * 5
+      : null,
     days: comparable ? Math.min(...comparisons.map((item) => item.days)) : 0,
   };
 }
@@ -215,28 +247,36 @@ export function aggregate(funds, quotes, history) {
 export function signalFor(summary, state) {
   if (!summary.complete || !summary.coherent)
     return {
-      title: "数据尚未齐备",
+      title: "等待完整数据。",
       label: "等待完整数据",
       level: "neutral",
       detail: "部分 ETF 行情缺失或时间差超过 3 分钟，暂缓综合信号。",
     };
   if (state.session && !state.fresh)
     return {
-      title: "行情延迟，等待更新",
+      title: "行情待更新。",
       label: "数据延迟",
       level: "neutral",
       detail: "保留最近一次可用数据，恢复实时连接后重新判断。",
     };
   if (summary.ratio === null)
     return {
-      title: "正在建立同刻基线",
+      title: "基线准备中。",
       label: "积累数据中",
       level: "neutral",
-      detail: "需完整历史五分钟数据与当日已完成区间，开盘前五分钟暂不计算。",
+      detail: "需完整历史五分钟数据与当日已完成区间，开盘初期暂不计算。",
+    };
+  if (summary.comparisonLagMinutes > 10)
+    return {
+      title: "量能待更新。",
+      label: "量能延迟",
+      level: "neutral",
+      detail:
+        "可用量能区间落后最新行情超过 10 个交易分钟，更新后恢复综合信号。",
     };
   if (summary.flow === null)
     return {
-      title: "买卖方向数据不足",
+      title: "方向待确认。",
       label: "方向待确认",
       level: "neutral",
       detail: "外内盘数据不足，成交额与量能倍数仍可查看。",
@@ -244,29 +284,29 @@ export function signalFor(summary, state) {
   const skew = summary.amount ? summary.flow / summary.amount : 0;
   if (summary.ratio >= 1.8 && skew >= 0.08)
     return {
-      title: "显著放量，买盘偏强",
+      title: "放量。买盘偏强。",
       label: "重点观察",
       level: "strong",
-      detail: "成交额明显高于历史同刻，外盘占优。出现了值得关注的量价信号。",
+      detail: "量能 ≥ 1.8×，买卖差占比 ≥ 8%。",
     };
   if (summary.ratio >= 1.3 && skew > 0)
     return {
-      title: "成交放量，留意买盘",
+      title: "放量。留意买盘。",
       label: "放量观察",
       level: "watch",
-      detail: "宽基 ETF 交投活跃度上升，外内盘差偏正，可持续观察。",
+      detail: "量能 ≥ 1.3×，外内盘差偏正。",
     };
   if (summary.ratio >= 1.3)
     return {
-      title: "成交放量，卖盘偏强",
+      title: "放量。卖盘偏强。",
       label: "放量观察",
       level: "watch",
-      detail: "交投活跃度上升，外内盘差偏负，方向信号仍需观察。",
+      detail: "量能 ≥ 1.3×，外内盘差偏负。",
     };
   return {
-    title: "暂未出现显著放量信号",
+    title: "量能平稳。",
     label: "常态观察",
     level: "calm",
-    detail: "成交额未达到设定的放量阈值，继续跟踪量能与买卖方向。",
+    detail: "成交额低于 1.3× 放量观察阈值。",
   };
 }

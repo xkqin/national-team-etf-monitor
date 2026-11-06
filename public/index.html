@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#f7f8fa" />
+    <meta name="theme-color" content="#f5f5f7" />
     <meta
       name="description"
       content="跟踪12只宽基ETF的公开行情、历史同刻成交额与外内盘差，观察可能的异常交易活动。"
@@ -44,11 +44,11 @@
     <main class="shell">
       <section class="page-heading" id="overview">
         <div>
-          <p class="eyebrow">
-            <span class="live-dot"></span> 宽基 ETF · 公开行情观察
-          </p>
-          <h1>国家队，今天在上班吗<span>？</span></h1>
-          <p class="subtitle">从成交量里找线索，让每一次异动都有据可循。</p>
+          <p class="eyebrow"><span class="live-dot"></span> ETF WATCH</p>
+          <h1>
+            国家队。<br /><span class="headline-accent">今天有动静吗？</span>
+          </h1>
+          <p class="subtitle">12 只宽基 ETF。实时看量，持续跟踪。</p>
         </div>
         <div class="refresh-area">
           <div class="refresh-controls">
@@ -87,9 +87,9 @@
               今日信号 <span id="signal-badge" class="pill">正在连接</span
               ><span id="session-note" class="muted"></span>
             </p>
-            <h2 id="signal-title">等待实时行情</h2>
+            <h2 id="signal-title">连接中。</h2>
             <p id="signal-detail" class="hero-description">
-              正在连接公开数据源，并加载历史同刻成交额基线。
+              正在同步行情与历史基线。
             </p>
             <div class="hero-meta">
               <span
@@ -111,32 +111,30 @@
         </div>
         <div class="metrics">
           <article>
-            <div class="metric-label">观察池成交额 <span>01</span></div>
+            <div class="metric-label">成交额</div>
             <p class="metric-value" id="total-amount">—<small>亿元</small></p>
             <p class="metric-note" id="amount-note">按最新行情累计</p>
           </article>
           <article>
-            <div class="metric-label">同刻成交额倍数 <span>02</span></div>
+            <div class="metric-label">同刻量能</div>
             <p class="metric-value" id="volume-ratio">—<small>×</small></p>
             <p class="metric-note" id="ratio-note">已完成的五分钟区间</p>
           </article>
           <article>
-            <div class="metric-label">外内盘差估算 <span>03</span></div>
+            <div class="metric-label">买卖差估算</div>
             <p class="metric-value" id="net-flow">—<small>亿元</small></p>
             <p class="metric-note">成交额 × 外内盘量差占比</p>
           </article>
           <article>
-            <div class="metric-label">池内加权涨跌 <span>04</span></div>
+            <div class="metric-label">池内涨跌</div>
             <p class="metric-value" id="weighted-change">—<small>%</small></p>
             <p class="metric-note">按当日成交额加权</p>
           </article>
         </div>
         <div class="hero-foot">
           <span class="info-icon">i</span>
-          <p>
-            量价信号仅供观察，交易账户身份不可由公开行情确认。观察池依据历史披露选取。
-          </p>
-          <a href="#methodology">了解计算口径 <span>→</span></a>
+          <p>公开行情估算。机构身份，以披露为准。</p>
+          <a href="#methodology">计算方式 <span>→</span></a>
         </div>
       </section>
 
@@ -145,8 +143,8 @@
           <div class="chart-heading">
             <div>
               <p class="section-kicker">INTRADAY VOLUME</p>
-              <h2>今天的量，走到哪里了？</h2>
-              <p>观察池累计成交额，与历史同刻均值对照</p>
+              <h2>日内成交。</h2>
+              <p>与历史同刻对照。</p>
             </div>
             <span class="chart-unit">单位 · 亿元</span>
           </div>
@@ -165,8 +163,8 @@
           <div class="chart-heading">
             <div>
               <p class="section-kicker">HISTORICAL CONTEXT</p>
-              <h2>把今天，放进时间里</h2>
-              <p>观察池每日成交额，看看放量是否持续</p>
+              <h2>历史成交。</h2>
+              <p>放量，是否持续。</p>
             </div>
             <div class="range-control" role="group" aria-label="历史图表区间">
               <button data-range="21">1月</button
@@ -190,7 +188,7 @@
 
       <section class="groups-section" aria-labelledby="groups-title">
         <div class="section-heading">
-          <h2 id="groups-title">资金在看哪一边<span> / 板块分布</span></h2>
+          <h2 id="groups-title">宽基，一览。<span> / 板块分布</span></h2>
           <p>点击板块，筛选下方 ETF</p>
         </div>
         <div id="group-cards" class="group-grid"></div>
@@ -204,7 +202,7 @@
         <div class="funds-heading">
           <div>
             <p class="section-kicker">THE WATCHLIST</p>
-            <h2 id="funds-title">每一只 ETF，都看得见</h2>
+            <h2 id="funds-title">12 只 ETF。一个视图。</h2>
             <p id="table-summary">12 只核心宽基 ETF · 按成交额排序</p>
           </div>
           <label class="search"
@@ -265,50 +263,54 @@
         <div class="method-heading">
           <div>
             <p class="section-kicker">TRANSPARENT BY DESIGN</p>
-            <h2>数据从哪来，信号怎么算</h2>
+            <h2>数据，讲清楚。</h2>
           </div>
           <span class="pill subtle">口径公开 · 来源可查</span>
         </div>
         <div class="method-grid">
           <article>
             <span class="method-number">01</span>
-            <h3>先看量能，再看方向</h3>
+            <h3>看量能。</h3>
             <p>
-              同刻倍数 = 当日已完成五分钟区间累计成交额 ÷ 过去最多 20
-              个完整交易日同刻均值，至少需要 5 日样本。1.3× 进入放量观察，1.8×
-              且外内盘差占比 ≥ 8% 标记重点观察。阈值为本站观察规则。
+              对比前 20 个完整交易日同刻。1.3× 放量，1.8× 且买盘偏强时重点观察。
             </p>
           </article>
           <article>
             <span class="method-number">02</span>
-            <h3>把“估算”写清楚</h3>
+            <h3>留意方向。</h3>
             <p>
-              外内盘差估算 = 成交额 ×（外盘量 − 内盘量）÷（外盘量 +
-              内盘量）。这是基于成交方向分类的近似值，可能受撮合、套利、对冲和数据口径影响。交易账户、真实净申购和国家队持仓需依赖独立披露。
+              外内盘差为量价估算。机构身份、真实申购与持仓，以独立披露为准。
             </p>
           </article>
           <article>
             <span class="method-number">03</span>
-            <h3>历史标签，持续观察</h3>
-            <p>
-              观察池为 12 只核心宽基 ETF，参考 2025
-              年半年报相关汇金增持报道。历史标签存在披露滞后，当前持仓需核对最新基金报告。本站用成交额呈现历史活动。
-            </p>
+            <h3>核对披露。</h3>
+            <p>12 只 ETF，参考 2025 年半年报相关披露。历史标签具有滞后性。</p>
           </article>
         </div>
         <details>
-          <summary>数据源、刷新与完整性说明 <span>＋</span></summary>
+          <summary>查看完整口径 <span>＋</span></summary>
           <div class="method-details">
             <ul>
+              <li>
+                同刻倍数 = 当日已完成区间累计成交额 ÷ 前最多 20
+                个完整交易日同刻均值，至少需要 5 日样本。1.3× 为放量观察，1.8×
+                且外内盘差占比 ≥ 8% 为重点观察。阈值为本站规则。
+              </li>
+              <li>
+                外内盘差估算 = 成交额 ×（外盘量 − 内盘量）÷（外盘量 +
+                内盘量）。方向分类受撮合、套利、对冲与数据口径影响。
+              </li>
               <li>
                 实时行情来自腾讯财经公开接口，页面可见且自动刷新开启时每 20
                 秒请求一次。交易状态按北京时间工作日时段和行情时间推定，节假日或行情超过
                 3 分钟未更新会标记延迟。
               </li>
               <li>
-                日线与五分钟成交额来自东方财富公开接口。五分钟数据每 5
-                分钟更新，日线缓存每日更新。量能比较使用所有 ETF
-                共同可用、已结束的区间，标题下方标明比较截止时间。
+                历史日线与五分钟基线由 GitHub Actions
+                从东方财富采集，页面同源读取云端快照。当日五分钟成交额由腾讯分时累计额差分还原，每
+                5
+                分钟更新。量能比较使用全池共同可用的已结束区间，并标明截止时间。
               </li>
               <li>
                 GitHub Actions 在工作日北京时间 09:30—15:00
@@ -359,8 +361,8 @@
       </section>
       <footer>
         <span
-          >国家队 ETF 观察站
-          <span class="footer-dot">·</span> 看见异动，保留判断。</span
+          >国家队 ETF 观察站 <span class="footer-dot">·</span> 宽基 ETF
+          实时观察</span
         ><span>公开数据观察工具 · 投资决策需结合独立信息</span>
       </footer>
     </main>

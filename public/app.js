@@ -1,5 +1,6 @@
 import {
   REFRESH_MS,
+  BAR_TIMES,
   chinaNow,
   parseQuotes,
   aggregate,
@@ -7,6 +8,7 @@ import {
   signalFor,
   volumeComparison,
   completeDays,
+  minuteToFiveMinute,
 } from "./core.js";
 
 const $ = (id) => document.getElementById(id);
@@ -35,10 +37,10 @@ const state = {
   historyLoading: false,
   lastAttempt: 0,
   lastHistoryAttempt: 0,
-  lastDailyDate: "",
   source: "snapshot",
   quoteError: "",
   historyErrors: 0,
+  snapshotError: false,
   range: 63,
   group: "全部",
   search: "",
@@ -85,18 +87,30 @@ async function refreshQuotes() {
   }
 }
 
-async function fetchHistory(fund, period, limit) {
-  const secid = `${fund.symbol.startsWith("sh") ? 1 : 0}.${fund.code}`;
-  const url = `https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=${secid}&klt=${period}&fqt=0&lmt=${limit}&end=20500101&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57&_=${Date.now()}`;
-  const payload = JSON.parse(await fetchText(url, 18_000));
-  const lines = payload.data?.klines;
-  if (!lines?.length) throw new Error("历史数据为空");
-  return lines
-    .map((line) => {
-      const fields = line.split(",");
-      return [fields[0], Number(fields[6]), Number(fields[2])];
-    })
-    .filter((row) => Number.isFinite(row[1]) && row[1] >= 0);
+async function syncSnapshot() {
+  const snapshot = JSON.parse(
+    await fetchText(`./data/snapshot.json?_=${Date.now()}`),
+  );
+  if (!snapshot.generatedAt || !snapshot.history)
+    throw new Error("云端历史格式异常");
+  if (snapshot.generatedAt !== state.snapshotAt) {
+    state.history = snapshot.history;
+    state.snapshotAt = snapshot.generatedAt;
+    if (state.source !== "live") state.quotes = snapshot.quotes || {};
+  }
+  state.snapshotError = false;
+}
+
+async function fetchMinute(fund) {
+  const url = `https://web.ifzq.gtimg.cn/appstock/app/minute/query?code=${fund.symbol}&_=${Date.now()}`;
+  const payload = JSON.parse(await fetchText(url, 15_000));
+  const minute = payload.data?.[fund.symbol]?.data;
+  if (!minute?.date || !Array.isArray(minute.data))
+    throw new Error("分时数据为空");
+  return {
+    date: `${minute.date.slice(0, 4)}-${minute.date.slice(4, 6)}-${minute.date.slice(6, 8)}`,
+    bars: minuteToFiveMinute(minute.date, minute.data),
+  };
 }
 
 async function refreshHistory(force = false) {
@@ -104,31 +118,33 @@ async function refreshHistory(force = false) {
   if (!force && Date.now() - state.lastHistoryAttempt < 300_000) return;
   state.historyLoading = true;
   state.lastHistoryAttempt = Date.now();
-  const date = chinaNow().slice(0, 10);
-  const needDaily = state.lastDailyDate !== date;
-  const tasks = state.pool.flatMap((fund) => [
-    { fund, key: "fiveMinute", period: 5, limit: 1100 },
-    ...(needDaily ? [{ fund, key: "daily", period: 101, limit: 280 }] : []),
-  ]);
+  try {
+    await syncSnapshot();
+  } catch {
+    state.snapshotError = true;
+  }
   let failures = 0;
   // Bound simultaneous public-interface requests.
-  for (let start = 0; start < tasks.length; start += 4) {
-    const batch = tasks.slice(start, start + 4);
-    const results = await Promise.allSettled(
-      batch.map((task) => fetchHistory(task.fund, task.period, task.limit)),
-    );
+  for (let start = 0; start < state.pool.length; start += 4) {
+    const batch = state.pool.slice(start, start + 4);
+    const results = await Promise.allSettled(batch.map(fetchMinute));
     results.forEach((result, index) => {
-      const task = batch[index];
+      const fund = batch[index];
       if (result.status === "fulfilled") {
-        state.history[task.fund.symbol] ??= {};
-        state.history[task.fund.symbol][task.key] = result.value;
+        const { date, bars } = result.value;
+        state.history[fund.symbol] ??= {};
+        if (bars.length) {
+          const previous = (state.history[fund.symbol].fiveMinute || []).filter(
+            ([time]) => time.slice(0, 10) !== date,
+          );
+          state.history[fund.symbol].fiveMinute = [...previous, ...bars];
+        }
       } else {
         failures++;
       }
     });
   }
   state.historyErrors = failures;
-  if (!failures && needDaily) state.lastDailyDate = date;
   state.historyLoading = false;
   render();
 }
@@ -193,7 +209,7 @@ function render() {
     ? `行情 ${summary.date} ${formatTime(summary.time)}`
     : "尚未取得有效行情";
   $("source-state").textContent =
-    `${state.source === "live" ? "行情直连 · 腾讯财经" : "云端快照 · 腾讯财经"} / 历史 · 东方财富${state.historyErrors ? `（${state.historyErrors} 项更新失败）` : ""}`;
+    `${state.source === "live" ? "行情直连 · 腾讯财经" : "云端快照 · 腾讯财经"} / 历史 · 云端快照 / 分时 · 腾讯${state.historyErrors ? `（${state.historyErrors} 只分时更新失败）` : ""}`;
   $("snapshot-time").textContent = state.snapshotAt
     ? `云端快照 ${chinaNow(new Date(state.snapshotAt))}（北京时间）`
     : "云端快照尚未加载";
@@ -209,7 +225,11 @@ function render() {
       `行情覆盖 ${summary.rows.length}/${state.pool.length} 只，成交额为可用子集合计。`,
     );
   if (state.historyErrors)
-    alerts.push("部分历史数据更新失败，量能与图表沿用最近可用区间。");
+    alerts.push(
+      `${state.historyErrors} 只 ETF 的当日分时更新失败，量能沿用最近可用区间。`,
+    );
+  if (state.snapshotError)
+    alerts.push("云端历史同步暂不可用，保留已有历史基线，将自动重试。");
   $("connection-alert").hidden = !alerts.length;
   $("connection-alert").textContent = alerts.join(" ");
   renderGroups(summary);
@@ -426,10 +446,7 @@ function renderCharts() {
     emptyChart("history-chart", "等待历史成交额");
     return;
   }
-  const times = Array.from({ length: 49 }, (_, index) => {
-    const total = index <= 24 ? 570 + index * 5 : 780 + (index - 24) * 5;
-    return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
-  });
+  const times = ["09:30", ...BAR_TIMES];
   const historical = state.pool.map((fund) =>
     completeDays(state.history[fund.symbol]?.fiveMinute, summary.date),
   );
@@ -477,14 +494,14 @@ function renderCharts() {
       { position: 1, text: "15:00" },
     ];
     let svg =
-      '<defs><linearGradient id="volume-area" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stop-color="#ef704f" stop-opacity=".18"/><stop offset="100%" stop-color="#ef704f" stop-opacity=".01"/></linearGradient></defs>' +
+      '<defs><linearGradient id="volume-area" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stop-color="#0071e3" stop-opacity=".18"/><stop offset="100%" stop-color="#0071e3" stop-opacity=".01"/></linearGradient></defs>' +
       axes(max, labels);
     svg += `<path d="${pathFor(reference, max, times.length)}" fill="none" stroke="#b5becb" stroke-width="1.8" stroke-dasharray="5 5"/>`;
     if (current.length > 1) {
       const lastX =
         plot.left + ((current.length - 1) / (times.length - 1)) * innerWidth;
       const lastY = plot.top + innerHeight * (1 - current.at(-1) / max);
-      svg += `<path d="${pathFor(current, max, times.length)} L${lastX},${plot.top + innerHeight} L${plot.left},${plot.top + innerHeight} Z" fill="url(#volume-area)"/><path d="${pathFor(current, max, times.length)}" fill="none" stroke="#eb7959" stroke-width="2.4" stroke-linejoin="round"/><circle cx="${lastX}" cy="${lastY}" r="3.5" fill="#eb7959" stroke="#fff" stroke-width="2"/>`;
+      svg += `<path d="${pathFor(current, max, times.length)} L${lastX},${plot.top + innerHeight} L${plot.left},${plot.top + innerHeight} Z" fill="url(#volume-area)"/><path d="${pathFor(current, max, times.length)}" fill="none" stroke="#0071e3" stroke-width="2.4" stroke-linejoin="round"/><circle cx="${lastX}" cy="${lastY}" r="3.5" fill="#0071e3" stroke="#fff" stroke-width="2"/>`;
     }
     const records = times.map((time, index) => ({
       time,
@@ -539,7 +556,7 @@ function renderCharts() {
     const partial =
       row.date === chinaNow().slice(0, 10) &&
       chinaNow().slice(11, 16) < "15:00";
-    svg += `<rect x="${x - barWidth / 2}" y="${plot.top + innerHeight - height}" width="${barWidth}" height="${height}" rx="1" fill="${partial ? "#f8d9c9" : row.date === summary.date ? "#e87954" : "#efb299"}"/>`;
+    svg += `<rect x="${x - barWidth / 2}" y="${plot.top + innerHeight - height}" width="${barWidth}" height="${height}" rx="1" fill="${partial ? "#d8e7fb" : row.date === summary.date ? "#0071e3" : "#acc7ee"}"/>`;
   });
   if (average) {
     const y = plot.top + innerHeight * (1 - average / max);
@@ -638,20 +655,9 @@ async function init() {
   try {
     state.pool = JSON.parse(await fetchText("./pool.json"));
     try {
-      const snapshot = JSON.parse(
-        await fetchText(
-          `./data/snapshot.json?_=${Math.floor(Date.now() / 300_000)}`,
-        ),
-      );
-      state.quotes = snapshot.quotes || {};
-      state.history = snapshot.history || {};
-      state.snapshotAt = snapshot.generatedAt;
-      state.lastHistoryAttempt = Date.parse(snapshot.generatedAt) || 0;
-      state.lastDailyDate = snapshot.generatedAt
-        ? chinaNow(new Date(snapshot.generatedAt)).slice(0, 10)
-        : "";
+      await syncSnapshot();
     } catch {
-      state.quoteError = "云端快照暂不可用";
+      state.snapshotError = true;
     }
     render();
     refreshQuotes();
