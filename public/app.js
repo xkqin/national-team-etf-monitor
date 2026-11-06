@@ -12,7 +12,7 @@ import {
   minuteShape,
   sessionPhase,
   LIVE_MIN_MINUTE,
-} from "./core.js";
+} from "./core.js?v=20261106b";
 
 // Minute lines change once a minute; the chart's live tip moves every second from the quotes.
 const MINUTE_MS = 60_000;
@@ -691,7 +691,8 @@ function renderAlerts(view) {
   if (state.quoteError) alerts.push(`${state.quoteError}，保留最近一次可用行情，将自动重试。`);
   if (market.session && !market.fresh) alerts.push("行情时间已落后超过 3 分钟，综合结论暂停。");
   if (summary.rows.length && !summary.complete) alerts.push(`行情覆盖 ${summary.rows.length}/${state.pool.length} 只，成交额为可用子集合计。`);
-  if (summary.rows.length && summary.rows.some((row) => !row.profile))
+  if (!state.snapshotLoaded && !state.snapshotError) alerts.push("实时行情已显示，正在加载历史同时点基线（约 1 MB）…");
+  else if (summary.rows.length && summary.rows.some((row) => !row.profile))
     alerts.push(`${summary.rows.filter((row) => !row.profile).length} 只 ETF 历史基线不足，放大倍数暂缓。`);
   if (state.minuteErrors) alerts.push(`${state.minuteErrors} 个分时请求失败，图表沿用上次数据。`);
   if (state.snapshotError) alerts.push("云端历史快照暂不可用，沿用已加载的基线，将自动重试。");
@@ -1125,19 +1126,26 @@ setInterval(() => {
   if (Date.now() - state.lastSnapshot > SNAPSHOT_MS) syncSnapshot().then(render);
 }, 250);
 
+// First paint comes from the live quote (a few KB); the 1 MB history snapshot and the minute
+// shape load in parallel and refine the numbers as soon as they arrive.
 async function init() {
   try {
-    state.pool = JSON.parse(await fetchText("./pool.json"));
-    state.lastShape = Date.now();
-    await Promise.all([syncSnapshot(), refreshShape()]);
-    render();
-    await refreshQuotes();
-    refreshMinutes(true);
+    state.pool = JSON.parse(await fetchText(`./pool.json?_=${Date.now()}`));
   } catch {
     $("conclusion-headline").textContent = "数据暂不可用";
-    $("conclusion-summary").textContent = "请检查网络连接，或稍后重新加载页面。";
+    $("conclusion-summary").textContent = "页面配置加载失败，请检查网络后刷新。";
     $("market-badge").textContent = "连接失败";
+    return;
   }
+  state.lastShape = Date.now();
+  const history = syncSnapshot().then(() => {
+    state.snapshotLoaded = true;
+    render();
+  });
+  refreshShape().then(render);
+  await refreshQuotes();
+  await history;
+  refreshMinutes(true);
 }
 
 init();

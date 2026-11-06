@@ -1,73 +1,11 @@
-/* Apple web fonts, loaded directly from Apple's public font service.
-   SF Pro (C) 2019 Apple Inc. All rights reserved.
-   PingFang SC (C) 2015 Apple Inc. All rights reserved. */
-@font-face {
-  font-family: "SF Pro Text";
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src:
-    local("SFProText-Regular"),
-    url("https://www.apple.com.cn/wss/fonts/SF-Pro-Text/v3/sf-pro-text_regular.woff2")
-      format("woff2");
-}
-@font-face {
-  font-family: "SF Pro Text";
-  font-style: normal;
-  font-weight: 500;
-  font-display: swap;
-  src:
-    local("SFProText-Medium"),
-    url("https://www.apple.com.cn/wss/fonts/SF-Pro-Text/v3/sf-pro-text_medium.woff2")
-      format("woff2");
-}
-@font-face {
-  font-family: "SF Pro Text";
-  font-style: normal;
-  font-weight: 600;
-  font-display: swap;
-  src:
-    local("SFProText-Semibold"),
-    url("https://www.apple.com.cn/wss/fonts/SF-Pro-Text/v3/sf-pro-text_semibold.woff2")
-      format("woff2");
-}
-@font-face {
-  font-family: "SF Pro Display";
-  font-style: normal;
-  font-weight: 600;
-  font-display: swap;
-  src:
-    local("SFProDisplay-Semibold"),
-    url("https://www.apple.com.cn/wss/fonts/SF-Pro-Display/v3/sf-pro-display_semibold.woff2")
-      format("woff2");
-}
-@font-face {
-  font-family: "SF Pro SC";
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src:
-    local("PingFangSC-Regular"),
-    url("https://www.apple.com.cn/wss/fonts/SF-Pro-SC/v1/PingFangSC-Regular.woff2")
-      format("woff2");
-}
-@font-face {
-  font-family: "SF Pro SC";
-  font-style: normal;
-  font-weight: 500;
-  font-display: swap;
-  src:
-    local("PingFangSC-Medium"),
-    url("https://www.apple.com.cn/wss/fonts/SF-Pro-SC/v1/PingFangSC-Medium.woff2")
-      format("woff2");
-}
-@font-face {
-  font-family: "SF Pro SC";
-  font-style: normal;
-  font-weight: 600;
-  font-display: swap;
-  src:
-    local("PingFangSC-Semibold"),
-    url("https://www.apple.com.cn/wss/fonts/SF-Pro-SC/v1/PingFangSC-Semibold.woff2")
-      format("woff2");
-}
+/* Apple system fonts (SF Pro + PingFang SC), taken from the visitor's device.
+   Apple devices ship these fonts, so local() resolves there. apple.com.cn does not allow
+   cross-origin font loading (no CORS header), so remote URLs only produced failed downloads
+   on other systems; those fall back to the system stack in styles.css. */
+@font-face { font-family: "SF Pro Text"; font-style: normal; font-weight: 400; font-display: swap; src: local("SF Pro Text"), local("SFProText-Regular"), local(".SFNSText-Regular"); }
+@font-face { font-family: "SF Pro Text"; font-style: normal; font-weight: 500; font-display: swap; src: local("SF Pro Text Medium"), local("SFProText-Medium"); }
+@font-face { font-family: "SF Pro Text"; font-style: normal; font-weight: 600; font-display: swap; src: local("SF Pro Text Semibold"), local("SFProText-Semibold"); }
+@font-face { font-family: "SF Pro Display"; font-style: normal; font-weight: 600; font-display: swap; src: local("SF Pro Display Semibold"), local("SFProDisplay-Semibold"); }
+@font-face { font-family: "SF Pro SC"; font-style: normal; font-weight: 400; font-display: swap; src: local("PingFang SC Regular"), local("PingFangSC-Regular"); }
+@font-face { font-family: "SF Pro SC"; font-style: normal; font-weight: 500; font-display: swap; src: local("PingFang SC Medium"), local("PingFangSC-Medium"); }
+@font-face { font-family: "SF Pro SC"; font-style: normal; font-weight: 600; font-display: swap; src: local("PingFang SC Semibold"), local("PingFangSC-Semibold"); }
