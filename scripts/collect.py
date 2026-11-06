@@ -5,6 +5,7 @@ import datetime as dt
 import json
 import pathlib
 import re
+import sys
 import time
 import urllib.request
 
@@ -64,6 +65,8 @@ def minute_bars(fund):
     for index in range(48):
         minutes = 575 + index * 5 if index < 24 else 785 + (index - 24) * 5
         clock = f"{minutes // 60:02d}{minutes % 60:02d}"
+        if clock >= max(records, default="0000") and clock not in ("1130", "1500"):
+            break
         record = records.get(clock)
         if record is None:
             break
@@ -75,36 +78,38 @@ def minute_bars(fund):
     return date, bars
 
 
-def history_for(fund, previous, fields):
-    market = "1" if fund["symbol"].startswith("sh") else "0"
-    base = ("https://push2his.eastmoney.com/api/qt/stock/kline/get?"
-            f"secid={market}.{fund['code']}&fqt=0&end=20500101"
-            "&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57")
-    result = {}
-    for key, period, limit in [("daily", 101, 280), ("fiveMinute", 5, 1100)]:
-        try:
-            payload = json.loads(request(f"{base}&klt={period}&lmt={limit}"))
-            lines = (payload.get("data") or {}).get("klines", [])
-            rows = [line.split(",") for line in lines]
-            result[key] = [[row[0], float(row[6]), float(row[2])] for row in rows]
-            if not rows:
-                raise ValueError("Empty history response")
-        except Exception as error:
-            result[key] = previous.get(key, [])
-            result.setdefault("errors", []).append(f"{key}: {type(error).__name__}")
-            if key == "daily" and fields:
-                date = dt.datetime.strptime(fields[30][:8], "%Y%m%d").strftime("%Y-%m-%d")
-                rows = {row[0]: row for row in result[key]}
-                rows[date] = [date, float(fields[37]) * 10000, float(fields[3])]
-                result[key] = sorted(rows.values())[-280:]
-            if key == "fiveMinute":
-                try:
-                    date, bars = minute_bars(fund)
-                    if bars:
-                        retained = [row for row in result[key] if row[0][:10] != date]
-                        result[key] = sorted(retained + bars)[-1100:]
-                except Exception:
-                    pass
+def history_for(fund, previous, fields, refresh_archive=False):
+    result = {
+        "daily": previous.get("daily", []),
+        "fiveMinute": previous.get("fiveMinute", []),
+    }
+    if refresh_archive or not all(result.values()):
+        market = "1" if fund["symbol"].startswith("sh") else "0"
+        base = ("https://push2his.eastmoney.com/api/qt/stock/kline/get?"
+                f"secid={market}.{fund['code']}&fqt=0&end=20500101"
+                "&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57")
+        for key, period, limit in [("daily", 101, 280), ("fiveMinute", 5, 1100)]:
+            try:
+                payload = json.loads(request(f"{base}&klt={period}&lmt={limit}"))
+                lines = (payload.get("data") or {}).get("klines", [])
+                if not lines:
+                    raise ValueError("Empty archive response")
+                rows = [line.split(",") for line in lines]
+                result[key] = [[row[0], float(row[6]), float(row[2])] for row in rows]
+            except Exception as error:
+                result.setdefault("errors", []).append(f"{key}: {type(error).__name__}")
+    if fields:
+        date = dt.datetime.strptime(fields[30][:8], "%Y%m%d").strftime("%Y-%m-%d")
+        daily = {row[0]: row for row in result["daily"]}
+        daily[date] = [date, float(fields[37]) * 10000, float(fields[3])]
+        result["daily"] = sorted(daily.values())[-280:]
+    try:
+        date, bars = minute_bars(fund)
+        if bars:
+            retained = [row for row in result["fiveMinute"] if row[0][:10] != date]
+            result["fiveMinute"] = sorted(retained + bars)[-1100:]
+    except Exception as error:
+        result.setdefault("errors", []).append(f"minute: {type(error).__name__}")
     return fund["symbol"], result
 
 
@@ -119,7 +124,7 @@ def main():
 
     def collect_fund(fund):
         retained = previous.get("history", {}).get(fund["symbol"], {})
-        return history_for(fund, retained, quotes.get(fund["symbol"]))
+        return history_for(fund, retained, quotes.get(fund["symbol"]), "--refresh-archive" in sys.argv)
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=6) as executor:
         history = dict(executor.map(collect_fund, POOL))

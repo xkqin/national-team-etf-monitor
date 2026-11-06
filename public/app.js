@@ -115,13 +115,23 @@ async function fetchMinute(fund) {
 
 async function refreshHistory(force = false) {
   if (state.historyLoading || !state.pool.length) return;
-  if (!force && Date.now() - state.lastHistoryAttempt < 300_000) return;
+  if (!force && Date.now() - state.lastHistoryAttempt < 60_000) return;
   state.historyLoading = true;
   state.lastHistoryAttempt = Date.now();
   try {
     await syncSnapshot();
   } catch {
     state.snapshotError = true;
+  }
+  const summary = aggregate(state.pool, state.quotes, state.history);
+  if (
+    summary.comparisonLagMinutes === null ||
+    summary.comparisonLagMinutes <= 10
+  ) {
+    state.historyErrors = 0;
+    state.historyLoading = false;
+    render();
+    return;
   }
   let failures = 0;
   // Bound simultaneous public-interface requests.
