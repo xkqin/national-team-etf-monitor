@@ -9,7 +9,7 @@
   --border: #ebebee;
   --background: #f5f5f7;
   --font:
-    -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+    "SF Pro Text", "SF Pro SC", -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
 * {
@@ -25,6 +25,7 @@ body {
   background: var(--background);
   font: 14px var(--font);
   -webkit-font-smoothing: antialiased;
+  font-synthesis: none;
 }
 button,
 input {
@@ -85,12 +86,12 @@ svg {
   align-items: center;
   gap: 10px;
   font-size: 15px;
-  font-weight: 650;
+  font-weight: 600;
   letter-spacing: -0.5px;
   white-space: nowrap;
 }
 .brand b {
-  font-weight: 650;
+  font-weight: 600;
 }
 .brand small {
   display: none;
@@ -167,7 +168,7 @@ h1 {
   font-size: 68px;
   line-height: 1.12;
   letter-spacing: -3px;
-  font-weight: 700;
+  font-weight: 600;
 }
 .headline-accent {
   background: linear-gradient(110deg, #0071e3 4%, #6555de 58%, #bc57ac 98%);
@@ -318,7 +319,7 @@ h1 {
 }
 .hero h2 {
   font-size: 40px;
-  font-weight: 650;
+  font-weight: 600;
   letter-spacing: -1.8px;
   line-height: 1.3;
   margin-top: 17px;
@@ -1492,4 +1493,16 @@ footer {
     animation: none !important;
     transition: none !important;
   }
+}
+
+h1,
+h2,
+.metric-value,
+.group-amount,
+.activity-ring strong {
+  font-family:
+    "SF Pro Display",
+    "SF Pro SC",
+    -apple-system,
+    sans-serif;
 }
