@@ -147,6 +147,9 @@ svg {
   gap: 30px;
   padding: 55px 0 42px;
 }
+.page-heading > div:first-child {
+  min-width: 0;
+}
 .eyebrow {
   display: flex;
   align-items: center;
@@ -181,6 +184,7 @@ h1 {
   color: #86868b;
   font-size: 13px;
   letter-spacing: 0.2px;
+  line-height: 1.8;
 }
 .refresh-area {
   text-align: right;

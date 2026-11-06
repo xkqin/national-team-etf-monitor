@@ -169,6 +169,15 @@ function render() {
   state.summary = summary;
   const market = marketState(summary.time);
   const signal = signalFor(summary, market);
+  $("conclusion-headline").textContent = signal.headline;
+  $("conclusion-summary").textContent = signal.evidence || signal.detail;
+  const period =
+    summary.date === chinaNow().slice(0, 10)
+      ? "今日结论"
+      : `${summary.date} 结论`;
+  $("conclusion-context").textContent = summary.date
+    ? `${period} · 量价推断`
+    : "等待有效数据";
   $("market-badge").textContent = market.label;
   $("market-badge").className =
     `status-badge ${market.session && market.fresh ? "live" : market.session ? "delayed" : ""}`;
@@ -673,6 +682,9 @@ async function init() {
     refreshQuotes();
     refreshHistory();
   } catch {
+    $("conclusion-headline").textContent = "数据暂不可用。";
+    $("conclusion-summary").textContent =
+      "请检查网络连接，或稍后重新加载页面。";
     $("signal-title").textContent = "页面配置加载失败";
     $("signal-detail").textContent = "请检查网络连接，或稍后重新加载页面。";
     $("market-badge").textContent = "连接失败";

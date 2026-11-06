@@ -44,6 +44,60 @@ test("delayed volume history suppresses current composite signals", () => {
     { session: true, fresh: true },
   );
   assert.equal(result.label, "量能延迟");
+  assert.equal(result.headline, "量能延迟，暂缓判断。");
+});
+
+test("headline and evidence follow the measured volume and direction", () => {
+  const base = {
+    complete: true,
+    coherent: true,
+    amount: 100e8,
+    comparisonLagMinutes: 0,
+  };
+  const market = { session: true, fresh: true };
+  const cases = [
+    { ratio: 1.16, flow: -5.78e8, headline: "暂未见上班迹象。" },
+    { ratio: 1.5, flow: 5e8, headline: "疑似有动作。" },
+    { ratio: 1.8, flow: 8e8, headline: "疑似在上班。" },
+    { ratio: 2, flow: -5e8, headline: "护盘尚待确认。" },
+    { ratio: 2, flow: 0, headline: "护盘尚待确认。" },
+  ];
+  for (const item of cases) {
+    const signal = signalFor({ ...base, ...item }, market);
+    assert.equal(signal.headline, item.headline);
+    assert.ok(signal.evidence.includes(`${item.ratio.toFixed(2)}×`));
+  }
+  const calm = signalFor({ ...base, ratio: 1.16, flow: -5.78e8 }, market);
+  assert.equal(calm.evidence, "同刻量能 1.16×，外内盘差估算 -5.78 亿元。");
+});
+
+test("incomplete, stale, and unready data defer the headline conclusion", () => {
+  const base = {
+    complete: true,
+    coherent: true,
+    amount: 100e8,
+    flow: 10e8,
+    ratio: 2,
+    comparisonLagMinutes: 0,
+  };
+  assert.equal(
+    signalFor({ ...base, complete: false }, { session: true, fresh: true })
+      .headline,
+    "数据不足，暂缓判断。",
+  );
+  assert.equal(
+    signalFor(base, { session: true, fresh: false }).headline,
+    "行情延迟，暂缓判断。",
+  );
+  assert.equal(
+    signalFor({ ...base, ratio: null }, { session: true, fresh: true })
+      .headline,
+    "基线待齐，暂缓判断。",
+  );
+  assert.equal(
+    signalFor({ ...base, flow: null }, { session: true, fresh: true }).headline,
+    "方向未明，继续观察。",
+  );
 });
 
 const fund = {

@@ -48,11 +48,18 @@
     <main class="shell">
       <section class="page-heading" id="overview">
         <div>
-          <p class="eyebrow"><span class="live-dot"></span> ETF WATCH</p>
+          <p class="eyebrow">
+            <span class="live-dot"></span
+            ><span id="conclusion-context">今日结论 · 量价推断</span>
+          </p>
           <h1>
-            国家队。<br /><span class="headline-accent">今天有动静吗？</span>
+            国家队。<br /><span class="headline-accent" id="conclusion-headline"
+              >正在读取数据。</span
+            >
           </h1>
-          <p class="subtitle">12 只宽基 ETF。实时看量，持续跟踪。</p>
+          <p class="subtitle" id="conclusion-summary">
+            正在同步行情与历史基线。
+          </p>
         </div>
         <div class="refresh-area">
           <div class="refresh-controls">
@@ -88,7 +95,7 @@
         <div class="hero-main">
           <div class="hero-copy">
             <p class="section-kicker">
-              今日信号 <span id="signal-badge" class="pill">正在连接</span
+              判断依据 <span id="signal-badge" class="pill">正在连接</span
               ><span id="session-note" class="muted"></span>
             </p>
             <h2 id="signal-title">连接中。</h2>

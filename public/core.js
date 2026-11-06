@@ -248,6 +248,7 @@ export function signalFor(summary, state) {
   if (!summary.complete || !summary.coherent)
     return {
       title: "等待完整数据。",
+      headline: "数据不足，暂缓判断。",
       label: "等待完整数据",
       level: "neutral",
       detail: "部分 ETF 行情缺失或时间差超过 3 分钟，暂缓综合信号。",
@@ -255,6 +256,7 @@ export function signalFor(summary, state) {
   if (state.session && !state.fresh)
     return {
       title: "行情待更新。",
+      headline: "行情延迟，暂缓判断。",
       label: "数据延迟",
       level: "neutral",
       detail: "保留最近一次可用数据，恢复实时连接后重新判断。",
@@ -262,6 +264,7 @@ export function signalFor(summary, state) {
   if (summary.ratio === null)
     return {
       title: "基线准备中。",
+      headline: "基线待齐，暂缓判断。",
       label: "积累数据中",
       level: "neutral",
       detail: "需完整历史五分钟数据与当日已完成区间，开盘初期暂不计算。",
@@ -269,6 +272,7 @@ export function signalFor(summary, state) {
   if (summary.comparisonLagMinutes > 10)
     return {
       title: "量能待更新。",
+      headline: "量能延迟，暂缓判断。",
       label: "量能延迟",
       level: "neutral",
       detail:
@@ -277,14 +281,19 @@ export function signalFor(summary, state) {
   if (summary.flow === null)
     return {
       title: "方向待确认。",
+      headline: "方向未明，继续观察。",
       label: "方向待确认",
       level: "neutral",
       detail: "外内盘数据不足，成交额与量能倍数仍可查看。",
     };
   const skew = summary.amount ? summary.flow / summary.amount : 0;
+  const flow = `${summary.flow > 0 ? "+" : ""}${(summary.flow / 1e8).toFixed(2)}`;
+  const evidence = `同刻量能 ${summary.ratio.toFixed(2)}×，外内盘差估算 ${flow} 亿元。`;
   if (summary.ratio >= 1.8 && skew >= 0.08)
     return {
       title: "放量。买盘偏强。",
+      headline: "疑似在上班。",
+      evidence,
       label: "重点观察",
       level: "strong",
       detail: "量能 ≥ 1.8×，买卖差占比 ≥ 8%。",
@@ -292,19 +301,25 @@ export function signalFor(summary, state) {
   if (summary.ratio >= 1.3 && skew > 0)
     return {
       title: "放量。留意买盘。",
+      headline: "疑似有动作。",
+      evidence,
       label: "放量观察",
       level: "watch",
       detail: "量能 ≥ 1.3×，外内盘差偏正。",
     };
   if (summary.ratio >= 1.3)
     return {
-      title: "放量。卖盘偏强。",
+      title: "放量。买盘待确认。",
+      headline: "护盘尚待确认。",
+      evidence,
       label: "放量观察",
       level: "watch",
-      detail: "量能 ≥ 1.3×，外内盘差偏负。",
+      detail: "量能 ≥ 1.3×，外内盘差未呈买盘优势。",
     };
   return {
     title: "量能平稳。",
+    headline: "暂未见上班迹象。",
+    evidence,
     label: "常态观察",
     level: "calm",
     detail: "成交额低于 1.3× 放量观察阈值。",
