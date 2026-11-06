@@ -11,8 +11,9 @@ import {
   profileAt,
   minuteShape,
   sessionPhase,
+  tradingMinute,
   LIVE_MIN_MINUTE,
-} from "./core.js?v=20261106d";
+} from "./core.js?v=20261106e";
 
 // Minute lines change once a minute; the chart's live tip moves every second from the quotes.
 const MINUTE_MS = 60_000;
@@ -301,8 +302,12 @@ async function minuteFromEastmoney(symbol) {
   return { date, records: days.get(date), source: "东方财富" };
 }
 
-async function fetchMinute(symbol) {
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// attempt 0 starts with the healthier source; retries start with the other one.
+async function fetchMinute(symbol, attempt = 0) {
   const order = sourceUp("tencent") || !sourceUp("eastmoney") ? ["tencent", "eastmoney"] : ["eastmoney", "tencent"];
+  if (attempt % 2 === 1) order.reverse();
   let lastError;
   for (const name of order) {
     try {
@@ -334,19 +339,37 @@ async function refreshMinutes(force = false) {
   if (!force && !minutesDue()) return;
   state.minuteLoading = true;
   state.lastMinute = Date.now();
-  const symbols = [...state.pool.map((fund) => fund.symbol), CHART_INDEX];
-  let failures = 0;
-  for (let start = 0; start < symbols.length; start += 6) {
-    const batch = symbols.slice(start, start + 6);
-    const results = await Promise.allSettled(batch.map(fetchMinute));
-    results.forEach((result, index) => {
-      if (result.status === "fulfilled") state.minutes[batch[index]] = result.value;
-      else failures++;
-    });
+  // Four at a time with a short gap (both hosts throttle bursts); funds that fail are retried
+  // twice within the same round, 1.2 s and 2.4 s later, starting with the other source.
+  let pending = [...state.pool.map((fund) => fund.symbol), CHART_INDEX];
+  for (let attempt = 0; attempt < 3 && pending.length; attempt++) {
+    if (attempt) await sleep(1200 * attempt);
+    const failed = [];
+    for (let start = 0; start < pending.length; start += 4) {
+      const batch = pending.slice(start, start + 4);
+      const results = await Promise.allSettled(batch.map((symbol) => fetchMinute(symbol, attempt)));
+      results.forEach((result, index) => {
+        if (result.status === "fulfilled" && result.value.records?.length) state.minutes[batch[index]] = result.value;
+        else failed.push(batch[index]);
+      });
+      if (start + 4 < pending.length) await sleep(150);
+    }
+    pending = failed;
   }
-  state.minuteErrors = failures;
+  state.minuteErrors = pending.length;
   state.minuteLoading = false;
   render();
+}
+
+// Funds whose minute lines trail the live quote by more than two trading minutes.
+function staleMinuteFunds(summary) {
+  if (!summary?.clock || !summary.date) return [];
+  const now = tradingMinute(summary.clock);
+  return state.pool.filter((fund) => {
+    const item = state.minutes[fund.symbol];
+    if (!item || item.date !== summary.date || !item.records.length) return true;
+    return now - tradingMinute(item.records.at(-1).clock) > 2;
+  });
 }
 
 /* ---------------- Derived view ---------------- */
@@ -745,7 +768,12 @@ function renderAlerts(view) {
     else if (!state.snapshotLoaded) alerts.push(`云端历史快照加载失败（第 ${state.snapshotFails} 次，自动重试中），正在改从东方财富直接获取基线…`);
     else alerts.push(`${baselineMissing} 只 ETF 历史基线不足，放大倍数暂缓。`);
   }
-  if (state.minuteErrors) alerts.push(`${state.minuteErrors} 个分时请求失败，图表沿用上次数据。`);
+  // Only warn when the chart is actually behind, not on a single throttled request.
+  if (state.lastMinute && !state.minuteLoading) {
+    const stale = staleMinuteFunds(summary);
+    if (stale.length && summary.rows.length)
+      alerts.push(`${stale.length} 只 ETF 的分时暂未更新到最新（行情源临时限流），图表这几只沿用上一分钟，会自动补齐；成交额与放大倍数不受影响。`);
+  }
   if (state.snapshotError && state.snapshotLoaded) alerts.push("云端历史快照刷新失败，沿用已加载的基线，将自动重试。");
   $("connection-alert").hidden = !alerts.length;
   $("connection-alert").textContent = alerts.join(" ");
@@ -1082,7 +1110,7 @@ function renderTable() {
 function renderHealth(view) {
   const ok = state.source === "live" && !state.quoteError;
   $("health-dot").className = `health-dot ${ok ? "ok" : "warn"}`;
-  $("source-state").textContent = `${ok ? "行情直连 · 腾讯财经" : "云端快照行情（直连失败时兜底）"} · 分时 ${view.used.length}/${state.pool.length} 只${state.minuteErrors ? `（${state.minuteErrors} 个请求失败）` : ""}`;
+  $("source-state").textContent = `${ok ? "行情直连 · 腾讯财经" : "云端快照行情（直连失败时兜底）"} · 分时 ${view.used.length}/${state.pool.length} 只${state.minuteErrors ? `（本轮 ${state.minuteErrors} 只重试后仍未取到，沿用上一分钟）` : ""}`;
   const range = view.summary.profileRange;
   $("snapshot-time").textContent =
     (state.snapshotAt
