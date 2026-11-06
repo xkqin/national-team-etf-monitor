@@ -12,7 +12,7 @@ import {
   minuteShape,
   sessionPhase,
   LIVE_MIN_MINUTE,
-} from "./core.js?v=20261106b";
+} from "./core.js?v=20261106c";
 
 // Minute lines change once a minute; the chart's live tip moves every second from the quotes.
 const MINUTE_MS = 60_000;
@@ -198,20 +198,67 @@ async function refreshShape() {
   }
 }
 
+// The history snapshot (~325 KB gzipped from github.io) only feeds the same-time baseline.
+// github.io can be slow from mainland China, so a failed load is retried within seconds and,
+// meanwhile, the baseline is rebuilt from Eastmoney's five-minute bars (the same raw data).
+const SNAPSHOT_RETRY_MS = [5_000, 15_000, 30_000, 60_000, 120_000];
 async function syncSnapshot() {
+  if (state.snapshotLoading) return;
+  state.snapshotLoading = true;
   state.lastSnapshot = Date.now();
   try {
-    const snapshot = JSON.parse(await fetchText(`./data/snapshot.json?_=${Date.now()}`, 20_000));
+    const snapshot = JSON.parse(await fetchText(`./data/snapshot.json?_=${Date.now()}`, 30_000));
     if (!snapshot.generatedAt || !snapshot.history) throw new Error("快照格式异常");
     if (snapshot.generatedAt !== state.snapshotAt) {
       state.history = snapshot.history;
       state.snapshotAt = snapshot.generatedAt;
+      state.baselineSource = "云端快照";
       if (state.source !== "live") state.quotes = { ...snapshot.quotes };
     }
     state.snapshotError = false;
+    state.snapshotLoaded = true;
+    state.snapshotFails = 0;
   } catch {
     state.snapshotError = true;
+    state.snapshotFails = (state.snapshotFails || 0) + 1;
+    state.nextSnapshotTry = Date.now() + SNAPSHOT_RETRY_MS[Math.min(state.snapshotFails - 1, SNAPSHOT_RETRY_MS.length - 1)];
+    if (!state.snapshotLoaded) loadBaselineDirect();
+  } finally {
+    state.snapshotLoading = false;
   }
+}
+
+async function loadBaselineDirect() {
+  if (state.directLoading || state.snapshotLoaded) return;
+  state.directLoading = true;
+  const missing = state.pool.filter((fund) => !(state.history[fund.symbol]?.fiveMinute?.length >= 240));
+  for (let start = 0; start < missing.length; start += 6) {
+    const batch = missing.slice(start, start + 6);
+    const results = await Promise.allSettled(
+      batch.map(async (fund) => {
+        const payload = JSON.parse(
+          await fetchText(
+            `https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=${secid(fund.symbol)}&fqt=0&end=20500101&klt=5&lmt=1100&fields1=f1&fields2=f51,f53,f57&_=${Date.now()}`,
+            15_000,
+          ),
+        );
+        const lines = payload.data?.klines;
+        if (!Array.isArray(lines) || lines.length < 240) throw new Error("历史数据为空");
+        return lines.map((line) => {
+          const [time, close, amount] = line.split(",");
+          return [time, Number(amount), Number(close)];
+        });
+      }),
+    );
+    if (state.snapshotLoaded) break;
+    results.forEach((result, index) => {
+      if (result.status === "fulfilled") state.history[batch[index].symbol] = { fiveMinute: result.value };
+    });
+  }
+  if (!state.snapshotLoaded && state.pool.every((fund) => state.history[fund.symbol]?.fiveMinute?.length >= 240))
+    state.baselineSource = "东方财富直连";
+  state.directLoading = false;
+  render();
 }
 
 // Two independent minute feeds. A feed that fails is rested for five minutes and the other
@@ -324,7 +371,7 @@ function buildView() {
   const used = [];
   for (const fund of state.pool) {
     const item = state.minutes[fund.symbol];
-    if (item?.date === date && item.records.length && profiles[fund.symbol]) {
+    if (item?.date === date && item.records.length) {
       minuteMap[fund.symbol] = item.records;
       used.push(fund.symbol);
     }
@@ -340,7 +387,8 @@ function buildView() {
 
   const events = [];
   for (const fund of state.pool) {
-    if (minuteMap[fund.symbol]) events.push(...fundPulses(fund, minuteMap[fund.symbol], profiles[fund.symbol], shape));
+    if (minuteMap[fund.symbol] && profiles[fund.symbol])
+      events.push(...fundPulses(fund, minuteMap[fund.symbol], profiles[fund.symbol], shape));
   }
   events.sort((a, b) => b.minute - a.minute || b.multiple - a.multiple);
 
@@ -691,11 +739,14 @@ function renderAlerts(view) {
   if (state.quoteError) alerts.push(`${state.quoteError}，保留最近一次可用行情，将自动重试。`);
   if (market.session && !market.fresh) alerts.push("行情时间已落后超过 3 分钟，综合结论暂停。");
   if (summary.rows.length && !summary.complete) alerts.push(`行情覆盖 ${summary.rows.length}/${state.pool.length} 只，成交额为可用子集合计。`);
-  if (!state.snapshotLoaded && !state.snapshotError) alerts.push("实时行情已显示，正在加载历史同时点基线（约 1 MB）…");
-  else if (summary.rows.length && summary.rows.some((row) => !row.profile))
-    alerts.push(`${summary.rows.filter((row) => !row.profile).length} 只 ETF 历史基线不足，放大倍数暂缓。`);
+  const baselineMissing = summary.rows.filter((row) => !row.profile).length;
+  if (summary.rows.length && baselineMissing) {
+    if (!state.snapshotLoaded && !state.snapshotError) alerts.push("实时行情已显示，正在加载历史同时点基线…");
+    else if (!state.snapshotLoaded) alerts.push(`云端历史快照加载失败（第 ${state.snapshotFails} 次，自动重试中），正在改从东方财富直接获取基线…`);
+    else alerts.push(`${baselineMissing} 只 ETF 历史基线不足，放大倍数暂缓。`);
+  }
   if (state.minuteErrors) alerts.push(`${state.minuteErrors} 个分时请求失败，图表沿用上次数据。`);
-  if (state.snapshotError) alerts.push("云端历史快照暂不可用，沿用已加载的基线，将自动重试。");
+  if (state.snapshotError && state.snapshotLoaded) alerts.push("云端历史快照刷新失败，沿用已加载的基线，将自动重试。");
   $("connection-alert").hidden = !alerts.length;
   $("connection-alert").textContent = alerts.join(" ");
 }
@@ -729,8 +780,11 @@ function renderChart() {
   const x = (minute) => m.l + (minute / 240) * iw;
   const f = (n) => n.toFixed(1);
 
-  // Baseline over the same funds, at every minute of the day.
-  const baselineAt = (minute) => used.reduce((sum, symbol) => sum + (profileAt(profiles[symbol], minute, view.shape) || 0), 0);
+  // Baseline over the same funds, at every minute of the day. Today's lines are drawn even
+  // while the history is still loading; the baseline joins once every fund has one.
+  const baselineReady = used.every((symbol) => profiles[symbol]);
+  const baselineAt = (minute) =>
+    baselineReady ? used.reduce((sum, symbol) => sum + profileAt(profiles[symbol], minute, view.shape), 0) : 0;
   const baseline = Array.from({ length: 241 }, (_, minute) => baselineAt(minute));
   const last = series.at(-1);
   const tip = (() => {
@@ -798,8 +852,12 @@ function renderChart() {
   }
 
   // B: baseline (full day, dashed) and today's cumulative turnover
-  const baseD = baseline.map((value, minute) => `${minute ? "L" : "M"}${f(x(minute))} ${f(yCum(value))}`).join("");
-  svg += `<path d="${baseD}" fill="none" stroke="var(--base)" stroke-width="1.5" stroke-dasharray="5 5"/>`;
+  if (baselineReady) {
+    const baseD = baseline.map((value, minute) => `${minute ? "L" : "M"}${f(x(minute))} ${f(yCum(value))}`).join("");
+    svg += `<path d="${baseD}" fill="none" stroke="var(--base)" stroke-width="1.5" stroke-dasharray="5 5"/>`;
+  } else {
+    svg += `<text class="axis" x="${f(width - m.r)}" y="${f(yB + 12)}" text-anchor="end">同时点均值加载中…</text>`;
+  }
   const todayPoints = series.map((p) => [p.minute, p.cumulative]);
   if (tip) todayPoints.push([tip.minute, tip.cumulative]);
   const todayD = todayPoints.map(([minute, value], i) => `${i ? "L" : "M"}${f(x(minute))} ${f(yCum(value))}`).join("");
@@ -880,7 +938,7 @@ function onChartMove(event) {
   const rows = [
     ["沪深300", best.index !== null ? `<span class="${tone(best.index)}">${pct(best.index)}</span>` : "—"],
     ["今日累计", `${yi(best.cumulative)} 亿`],
-    ["同时点均值", `${yi(base)} 亿`],
+    ["同时点均值", base ? `${yi(base)} 亿` : "加载中"],
     ["放大倍数", best.minute >= LIVE_MIN_MINUTE && base ? times(best.cumulative / base) : "—"],
     ["本分钟成交", `${yi(best.amount)} 亿${finite(best.multiple) ? ` · ${times(best.multiple)}` : ""}`],
     ["分钟涨跌", `<span class="${tone(best.move)}">${pct(best.move * 100, 3)}</span>`],
@@ -1026,9 +1084,14 @@ function renderHealth(view) {
   $("health-dot").className = `health-dot ${ok ? "ok" : "warn"}`;
   $("source-state").textContent = `${ok ? "行情直连 · 腾讯财经" : "云端快照行情（直连失败时兜底）"} · 分时 ${view.used.length}/${state.pool.length} 只${state.minuteErrors ? `（${state.minuteErrors} 个请求失败）` : ""}`;
   const range = view.summary.profileRange;
-  $("snapshot-time").textContent = state.snapshotAt
-    ? `历史快照 ${chinaNow(new Date(state.snapshotAt))}（北京时间）${range ? ` · 基线 ${range.from} — ${range.to}` : ""}`
-    : "云端快照尚未加载";
+  $("snapshot-time").textContent =
+    (state.snapshotAt
+      ? `历史快照 ${chinaNow(new Date(state.snapshotAt))}（北京时间）`
+      : state.baselineSource
+        ? "云端快照未加载"
+        : "云端快照加载中") +
+    (state.baselineSource ? ` · 基线来源 ${state.baselineSource}` : "") +
+    (range ? ` · 基线 ${range.from} — ${range.to}` : "");
 }
 
 /* ---------------- Interaction ---------------- */
@@ -1123,7 +1186,10 @@ setInterval(() => {
     state.lastShape = Date.now();
     refreshShape().then(render);
   }
-  if (Date.now() - state.lastSnapshot > SNAPSHOT_MS) syncSnapshot().then(render);
+  const snapshotDue = state.snapshotLoaded
+    ? Date.now() - state.lastSnapshot > SNAPSHOT_MS
+    : state.snapshotFails > 0 && Date.now() >= (state.nextSnapshotTry || 0);
+  if (snapshotDue && !state.snapshotLoading) syncSnapshot().then(render);
 }, 250);
 
 // First paint comes from the live quote (a few KB); the 1 MB history snapshot and the minute
@@ -1138,10 +1204,7 @@ async function init() {
     return;
   }
   state.lastShape = Date.now();
-  const history = syncSnapshot().then(() => {
-    state.snapshotLoaded = true;
-    render();
-  });
+  const history = syncSnapshot().then(render);
   refreshShape().then(render);
   await refreshQuotes();
   await history;
