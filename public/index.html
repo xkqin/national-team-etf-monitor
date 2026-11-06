@@ -2,385 +2,298 @@
 <html lang="zh-CN">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#f5f5f7" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#ffffff" />
     <meta
       name="description"
-      content="跟踪12只宽基ETF的公开行情、历史同刻成交额与外内盘差，观察可能的异常交易活动。"
+      content="盘中实时跟踪汇金 2025 年报持有的 23 只宽基 ETF：同时点放大倍数、主动买卖、IOPV 溢价与分钟级放量脉冲，判断国家队今天是否在场。"
     />
-    <title>国家队 ETF 观察站 · 实时量能监控</title>
+    <title>国家队 ETF 观察站 · 盘中实时</title>
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
     <link rel="preconnect" href="https://www.apple.com.cn" crossorigin />
     <link rel="stylesheet" href="./fonts.css" />
     <link rel="stylesheet" href="./styles.css" />
-    <link rel="stylesheet" href="./astra-entry.css" />
     <script type="module" src="./app.js"></script>
   </head>
   <body>
-    <div class="top-line"></div>
-    <header class="site-header shell">
-      <a class="brand" href="./" aria-label="国家队ETF观察站首页">
-        <span class="brand-mark" aria-hidden="true"
-          ><svg viewBox="0 0 28 28">
-            <path d="M4 18h4l3-10 5 15 3-11 2 6h3" /></svg
-        ></span>
-        <span>国家队 <b>ETF</b> 观察站<small>NATIONAL TEAM WATCH</small></span>
-      </a>
-      <nav aria-label="主导航">
-        <a href="#overview">实时概览</a><a href="#funds">ETF 明细</a
-        ><a href="#methodology">数据口径 <span>↗</span></a>
-        <a class="astra-nav" href="./astra/" target="_blank" rel="noopener noreferrer" title="手机 / 电脑均可访问 · 密码解锁">Astra 投资看板 <span>↗</span></a>
-      </nav>
-      <a
-        class="github-link"
-        href="https://github.com/xkqin/national-team-etf-monitor"
-        target="_blank"
-        rel="noopener noreferrer"
-        aria-label="查看GitHub源代码"
-        ><svg viewBox="0 0 24 24" aria-hidden="true">
-          <path
-            d="M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.22.68-.48v-1.86c-2.78.6-3.37-1.18-3.37-1.18-.46-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.61.07-.61 1 .07 1.53 1.03 1.53 1.03.89 1.52 2.34 1.08 2.91.83.09-.64.35-1.08.64-1.33-2.22-.25-4.55-1.11-4.55-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.65 0 0 .84-.27 2.75 1.03A9.6 9.6 0 0 1 12 6.82a9.6 9.6 0 0 1 2.5.34c1.91-1.3 2.75-1.03 2.75-1.03.55 1.38.2 2.4.1 2.65.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.69-4.57 4.94.36.31.68.92.68 1.85v2.76c0 .27.18.58.69.48A10 10 0 0 0 12 2Z"
-          /></svg
-        ><span>GitHub</span></a
-      >
+    <a class="skip" href="#main">跳到正文</a>
+
+    <header class="nav" id="nav">
+      <div class="nav-inner">
+        <a class="brand" href="./" aria-label="国家队 ETF 观察站首页">
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 28 28"><path d="M3 18h4l3-10 5 15 3-11 2 6h5" /></svg>
+          </span>
+          <span class="brand-name">国家队 <b>ETF</b> 观察站</span>
+        </a>
+        <nav class="nav-links" aria-label="主导航">
+          <a href="#overview">实时结论</a>
+          <a href="#intraday">盘中走势</a>
+          <a href="#groups">分组</a>
+          <a href="#funds">明细</a>
+          <a href="#methodology">口径</a>
+          <a href="./astra/" target="_blank" rel="noopener noreferrer" title="密码解锁的私人看板">Astra ↗</a>
+        </nav>
+        <div class="live-pill" id="live-pill" role="status" aria-live="off">
+          <span class="dot" aria-hidden="true"></span>
+          <span id="market-badge">连接中</span>
+          <span class="live-rate" id="live-rate"></span>
+        </div>
+      </div>
+      <div class="nav-progress" id="nav-progress"></div>
     </header>
 
-    <main class="shell">
-      <section class="page-heading" id="overview">
-        <div>
-          <p class="eyebrow">
-            <span class="live-dot"></span
-            ><span id="conclusion-context">今日结论 · 量价推断</span>
-          </p>
-          <h1>
-            国家队。<br /><span class="headline-accent" id="conclusion-headline"
-              >正在读取数据。</span
-            >
-          </h1>
-          <p class="subtitle" id="conclusion-summary">
-            正在同步行情与历史基线。
-          </p>
-        </div>
-        <div class="refresh-area">
-          <div class="refresh-controls">
-            <span id="market-badge" class="status-badge">连接行情中</span
-            ><button
-              id="refresh"
-              class="icon-button"
-              aria-label="立即刷新行情"
-              title="立即刷新"
-            >
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path
-                  d="M20 7v5h-5M4 17v-5h5M5.4 8a7 7 0 0 1 11.5-3L20 8M4 16l3.1 3A7 7 0 0 0 18.6 16"
-                />
-              </svg></button
-            ><button id="pause" class="plain-button" aria-pressed="false">
-              暂停刷新
-            </button>
-          </div>
-          <p id="update-time">正在获取最新数据…</p>
-          <span id="countdown">行情每 20 秒 · 量能每 5 分钟</span>
-        </div>
-      </section>
+    <div class="ticker" aria-label="主要指数实时行情">
+      <div class="ticker-inner" id="ticker">
+        <span class="ticker-empty">指数行情加载中…</span>
+      </div>
+    </div>
 
-      <div
-        id="connection-alert"
-        class="connection-alert"
-        role="status"
-        hidden
-      ></div>
-
-      <section class="hero card" aria-labelledby="signal-title">
-        <div class="hero-main">
-          <div class="hero-copy">
-            <p class="section-kicker">
-              判断依据 <span id="signal-badge" class="pill">正在连接</span
-              ><span id="session-note" class="muted"></span>
+    <main id="main">
+      <!-- ============ Conclusion ============ -->
+      <section class="hero" id="overview" aria-labelledby="conclusion-headline">
+        <div class="wrap">
+          <div class="hero-top">
+            <p class="eyebrow">
+              <span class="live-dot" id="eyebrow-dot"></span>
+              <span id="conclusion-context">今日结论 · 实时跟踪</span>
             </p>
-            <h2 id="signal-title">连接中。</h2>
-            <p id="signal-detail" class="hero-description">
-              正在同步行情与历史基线。
-            </p>
-            <div class="hero-meta">
-              <span
-                ><i class="small-dot"></i
-                ><span id="coverage">12 只核心宽基 ETF</span></span
-              ><span id="baseline-note">前 20 个完整交易日同刻基线</span>
-            </div>
+            <p class="stamp" id="update-time">正在连接行情…</p>
           </div>
-          <div class="activity-panel">
-            <div class="activity-ring" id="activity-ring">
-              <div>
-                <strong id="ring-value">—</strong><span>同刻量能倍数</span>
+          <div class="hero-grid">
+            <div class="hero-copy">
+              <p class="question" id="question">国家队今天进场了吗？</p>
+              <h1 id="conclusion-headline" class="headline level-neutral">正在读取数据</h1>
+              <p class="hero-lede" id="conclusion-summary">正在同步实时行情与历史同时点基线。</p>
+              <p class="hero-note" id="conclusion-note"></p>
+              <div class="hero-tags">
+                <span class="tag" id="signal-badge">正在连接</span>
+                <span class="tag subtle" id="coverage">23 只宽基 ETF</span>
+                <span class="tag subtle" id="baseline-note">前 20 个完整交易日同时点基线</span>
               </div>
             </div>
-            <div class="ring-scale">
-              <span>常态 &lt; 1.3×</span><span>放量 ≥ 1.3×</span>
-            </div>
+            <figure class="gauge-card" aria-label="放大倍数仪表">
+              <svg id="gauge" class="gauge" viewBox="0 0 240 150" role="img" aria-label="同时点放大倍数"></svg>
+              <figcaption>
+                <strong id="gauge-value">—</strong>
+                <span>较同时点历史均值</span>
+              </figcaption>
+            </figure>
           </div>
-        </div>
-        <div class="metrics">
-          <article>
-            <div class="metric-label">成交额</div>
-            <p class="metric-value" id="total-amount">—<small>亿元</small></p>
-            <p class="metric-note" id="amount-note">按最新行情累计</p>
-          </article>
-          <article>
-            <div class="metric-label">同刻量能</div>
-            <p class="metric-value" id="volume-ratio">—<small>×</small></p>
-            <p class="metric-note" id="ratio-note">已完成的五分钟区间</p>
-          </article>
-          <article>
-            <div class="metric-label">买卖差估算</div>
-            <p class="metric-value" id="net-flow">—<small>亿元</small></p>
-            <p class="metric-note">成交额 × 外内盘量差占比</p>
-          </article>
-          <article>
-            <div class="metric-label">池内涨跌</div>
-            <p class="metric-value" id="weighted-change">—<small>%</small></p>
-            <p class="metric-note">按当日成交额加权</p>
-          </article>
-        </div>
-        <div class="hero-foot">
-          <span class="info-icon">i</span>
-          <p>公开行情估算。机构身份，以披露为准。</p>
-          <a href="#methodology">计算方式 <span>→</span></a>
+
+          <div class="evidence-head">
+            <span>进场证据</span>
+            <b id="evidence-score">— / 5</b>
+          </div>
+          <ul class="evidence" id="evidence" aria-label="进场证据清单"></ul>
+
+          <div class="kpis">
+            <article class="kpi">
+              <p class="kpi-label">国家队池合计成交额</p>
+              <p class="kpi-value" id="kpi-amount">—</p>
+              <p class="kpi-note" id="kpi-amount-note">等待行情</p>
+            </article>
+            <article class="kpi kpi-ratio">
+              <p class="kpi-label">成交额放大倍数</p>
+              <p class="kpi-value" id="kpi-ratio">—</p>
+              <div class="progress" aria-hidden="true">
+                <span class="progress-hist" id="progress-hist"></span>
+                <span class="progress-today" id="progress-today"></span>
+              </div>
+              <p class="kpi-note" id="kpi-ratio-note">基准 = 20 日均额 × 同时点进度</p>
+            </article>
+            <article class="kpi">
+              <p class="kpi-label">合计主动净买入</p>
+              <p class="kpi-value" id="kpi-flow">—</p>
+              <p class="kpi-note" id="kpi-flow-note">外盘 − 内盘口径推算</p>
+            </article>
+            <article class="kpi">
+              <p class="kpi-label">池内加权涨跌</p>
+              <p class="kpi-value" id="kpi-change">—</p>
+              <p class="kpi-note" id="kpi-change-note">按成交额加权</p>
+            </article>
+            <article class="kpi">
+              <p class="kpi-label">加权溢价率</p>
+              <p class="kpi-value" id="kpi-premium">—</p>
+              <p class="kpi-note" id="kpi-premium-note">现价相对 IOPV · 成交额加权</p>
+            </article>
+          </div>
+
+          <div id="connection-alert" class="alert" role="status" hidden></div>
+          <p class="fineprint">
+            名单为汇金 2025 年报披露的持有标签，非当前实时持仓；所有结论均为量价推断，不构成投资建议。
+            <a href="#methodology">完整口径与合规说明 ↓</a>
+          </p>
         </div>
       </section>
 
-      <section class="charts-grid" aria-label="成交额图表">
-        <article class="card chart-card">
-          <div class="chart-heading">
+      <!-- ============ Intraday ============ -->
+      <section class="band" id="intraday" aria-labelledby="intraday-title">
+        <div class="wrap">
+          <div class="section-head">
             <div>
-              <p class="section-kicker">INTRADAY VOLUME</p>
-              <h2>日内成交。</h2>
-              <p>与历史同刻对照。</p>
+              <p class="kicker">INTRADAY · 逐分钟</p>
+              <h2 id="intraday-title">盘中走势</h2>
+              <p class="section-sub">沪深300 指数、全池累计成交额与同时点均值、每分钟成交额与放量脉冲，同一时间轴。</p>
             </div>
-            <span class="chart-unit">单位 · 亿元</span>
+            <div class="legend">
+              <span><i class="sw sw-index"></i>沪深300</span>
+              <span><i class="sw sw-today"></i>今日累计</span>
+              <span><i class="sw sw-base"></i>同时点均值</span>
+              <span><i class="sw sw-pulse-up"></i>放量脉冲 · 涨</span>
+              <span><i class="sw sw-pulse-down"></i>放量脉冲 · 跌</span>
+            </div>
           </div>
-          <div class="chart-legend">
-            <span><i class="legend-line coral"></i>当日累计</span
-            ><span><i class="legend-line dashed"></i>历史同刻均值</span>
+          <div class="intraday-grid">
+            <article class="card chart-card">
+              <div id="intraday-chart" class="chart" aria-label="盘中逐分钟走势图"></div>
+              <p class="chart-foot" id="intraday-foot">正在加载逐分钟数据…</p>
+            </article>
+            <aside class="card feed-card" aria-labelledby="feed-title">
+              <div class="feed-head">
+                <h3 id="feed-title">实时异动</h3>
+                <span class="feed-count" id="feed-count">0</span>
+              </div>
+              <p class="feed-rule">单只 1 分钟成交 ≥ 同时段均值 4× 且 ≥ 0.5 亿</p>
+              <ol class="feed" id="feed">
+                <li class="feed-empty">等待分时数据…</li>
+              </ol>
+            </aside>
           </div>
-          <div
-            id="intraday-chart"
-            class="chart"
-            aria-label="当日累计成交额与历史同刻均值折线图"
-          ></div>
-          <p class="chart-foot" id="intraday-foot">正在加载五分钟数据…</p>
-        </article>
-        <article class="card chart-card">
-          <div class="chart-heading">
+        </div>
+      </section>
+
+      <!-- ============ Groups ============ -->
+      <section class="section" id="groups" aria-labelledby="groups-title">
+        <div class="wrap">
+          <div class="section-head">
             <div>
-              <p class="section-kicker">HISTORICAL CONTEXT</p>
-              <h2>历史成交。</h2>
-              <p>放量，是否持续。</p>
-            </div>
-            <div class="range-control" role="group" aria-label="历史图表区间">
-              <button data-range="21">1月</button
-              ><button data-range="63" class="active" aria-pressed="true">
-                3月</button
-              ><button data-range="250">1年</button>
+              <p class="kicker">BY INDEX · 分组</p>
+              <h2 id="groups-title">哪条线在放量</h2>
+              <p class="section-sub">按跟踪指数汇总。点击卡片筛选下方明细。</p>
             </div>
           </div>
-          <div class="chart-legend">
-            <span><i class="legend-block coral"></i>日成交额</span
-            ><span><i class="legend-line dashed"></i>前 20 日均值</span>
-          </div>
-          <div
-            id="history-chart"
-            class="chart"
-            aria-label="观察池历史每日成交额柱状图"
-          ></div>
-          <p class="chart-foot" id="history-foot">正在加载历史数据…</p>
-        </article>
-      </section>
-
-      <section class="groups-section" aria-labelledby="groups-title">
-        <div class="section-heading">
-          <h2 id="groups-title">宽基，一览。<span> / 板块分布</span></h2>
-          <p>点击板块，筛选下方 ETF</p>
-        </div>
-        <div id="group-cards" class="group-grid"></div>
-      </section>
-
-      <section
-        class="card funds-section"
-        id="funds"
-        aria-labelledby="funds-title"
-      >
-        <div class="funds-heading">
-          <div>
-            <p class="section-kicker">THE WATCHLIST</p>
-            <h2 id="funds-title">12 只 ETF。一个视图。</h2>
-            <p id="table-summary">12 只核心宽基 ETF · 按成交额排序</p>
-          </div>
-          <label class="search"
-            ><svg viewBox="0 0 24 24" aria-hidden="true">
-              <circle cx="10.5" cy="10.5" r="6.5" />
-              <path d="m16 16 5 5" /></svg
-            ><input
-              id="search"
-              type="search"
-              placeholder="搜索名称 / 代码"
-              aria-label="搜索ETF名称或代码"
-          /></label>
-        </div>
-        <div
-          class="filter-row"
-          id="filters"
-          role="group"
-          aria-label="ETF指数分类筛选"
-        ></div>
-        <div class="table-scroll">
-          <table>
-            <thead>
-              <tr>
-                <th>ETF / 代码</th>
-                <th>跟踪指数</th>
-                <th>
-                  <button data-sort="price">最新价 <span>↕</span></button>
-                </th>
-                <th>
-                  <button data-sort="change">涨跌幅 <span>↕</span></button>
-                </th>
-                <th aria-sort="descending">
-                  <button data-sort="amount">成交额 <span>↓</span></button>
-                </th>
-                <th>
-                  <button data-sort="ratio">同刻倍数 <span>↕</span></button>
-                </th>
-                <th>
-                  <button data-sort="flow">外内盘差估算 <span>↕</span></button>
-                </th>
-                <th>行情时间</th>
-              </tr>
-            </thead>
-            <tbody id="fund-rows">
-              <tr>
-                <td colspan="8" class="empty-state">正在连接行情…</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <div class="table-foot">
-          <span id="row-count">显示 0 / 12 只</span
-          ><span>红涨绿跌 · 点击 ETF 名称查看行情详情 ↗</span>
+          <div class="group-grid" id="group-cards"></div>
         </div>
       </section>
 
-      <section id="methodology" class="methodology card">
-        <a class="astra-entry" href="./astra/" target="_blank" rel="noopener noreferrer" aria-label="打开 Astra 私人投资看板">
-          <div class="astra-entry-icon" aria-hidden="true">✳</div>
-          <div class="astra-entry-copy"><span>ASTRA / PRIVATE DASHBOARD</span><h2>你的投资工作台。</h2><p>流程报告 · 投资组合 · 交易流水 · 研究报告</p><small>手机 / 电脑均可访问 · 模拟账户 · 密码解锁</small></div>
-          <div class="astra-entry-action">进入看板 <span>↗</span></div>
-        </a>
-        <div class="method-heading">
-          <div>
-            <p class="section-kicker">TRANSPARENT BY DESIGN</p>
-            <h2>数据，讲清楚。</h2>
+      <!-- ============ Funds ============ -->
+      <section class="section" id="funds" aria-labelledby="funds-title">
+        <div class="wrap">
+          <div class="section-head">
+            <div>
+              <p class="kicker">THE WATCHLIST · 明细</p>
+              <h2 id="funds-title">23 只 ETF，一张表</h2>
+              <p class="section-sub" id="table-summary">按成交额排序</p>
+            </div>
+            <label class="search">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 5 5" /></svg>
+              <input id="search" type="search" placeholder="搜索名称 / 代码" aria-label="搜索 ETF 名称或代码" />
+            </label>
           </div>
-          <span class="pill subtle">口径公开 · 来源可查</span>
+          <div class="chips" id="filters" role="group" aria-label="按指数筛选"></div>
+          <div class="card table-card">
+            <div class="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>ETF</th>
+                    <th>指数</th>
+                    <th class="num"><button data-sort="price">最新价 <span>↕</span></button></th>
+                    <th class="num"><button data-sort="change">涨跌幅 <span>↕</span></button></th>
+                    <th class="num" aria-sort="descending"><button data-sort="amount">成交额 <span>↓</span></button></th>
+                    <th class="num"><button data-sort="liveRatio">放大倍数 <span>↕</span></button></th>
+                    <th class="num"><button data-sort="flow">主动净买入 <span>↕</span></button></th>
+                    <th class="num"><button data-sort="premium">溢价率 <span>↕</span></button></th>
+                    <th>分时</th>
+                  </tr>
+                </thead>
+                <tbody id="fund-rows">
+                  <tr><td colspan="9" class="empty">正在连接行情…</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="table-foot">
+              <span id="row-count">显示 0 / 23 只</span>
+              <span>红涨绿跌 · 点击名称打开腾讯行情 ↗</span>
+            </div>
+          </div>
         </div>
-        <div class="method-grid">
-          <article>
-            <span class="method-number">01</span>
-            <h3>看量能。</h3>
-            <p>
-              对比前 20 个完整交易日同刻。1.3× 放量，1.8× 且买盘偏强时重点观察。
-            </p>
-          </article>
-          <article>
-            <span class="method-number">02</span>
-            <h3>留意方向。</h3>
-            <p>
-              外内盘差为量价估算。机构身份、真实申购与持仓，以独立披露为准。
-            </p>
-          </article>
-          <article>
-            <span class="method-number">03</span>
-            <h3>核对披露。</h3>
-            <p>12 只 ETF，参考 2025 年半年报相关披露。历史标签具有滞后性。</p>
-          </article>
-        </div>
-        <details>
-          <summary>查看完整口径 <span>＋</span></summary>
-          <div class="method-details">
+      </section>
+
+      <!-- ============ Methodology ============ -->
+      <section class="section method" id="methodology" aria-labelledby="method-title">
+        <div class="wrap">
+          <div class="section-head">
+            <div>
+              <p class="kicker">TRANSPARENT BY DESIGN · 口径</p>
+              <h2 id="method-title">每个数字怎么来的</h2>
+            </div>
+          </div>
+          <div class="method-grid">
+            <article class="card method-card">
+              <span class="method-no">01</span>
+              <h3>放大倍数</h3>
+              <p>今日实时成交额 ÷ 前 20 个完整交易日<em>同一时刻</em>的平均累计成交额。分母由 5 分钟线按真实分钟形状插值到秒，交易时段每秒更新。≥ 1.3× 记为放量观察。</p>
+            </article>
+            <article class="card method-card">
+              <span class="method-no">02</span>
+              <h3>主动净买入</h3>
+              <p>成交额 ×（外盘量 − 内盘量）÷（外盘量 + 内盘量）。≥ 1.8× 且净买入占成交 ≥ 8% 记为重点观察。方向受套利、对冲与撮合口径影响。</p>
+            </article>
+            <article class="card method-card">
+              <span class="method-no">03</span>
+              <h3>溢价与脉冲</h3>
+              <p>溢价率为现价相对交易所 IOPV；集中买入常把价格推到 IOPV 之上。脉冲为 1 分钟成交额达到同时段均值的数倍，开收盘集合竞价分钟不计。</p>
+            </article>
+          </div>
+          <details class="card details">
+            <summary>完整口径与合规说明 <span aria-hidden="true">＋</span></summary>
             <ul>
-              <li>
-                同刻倍数 = 当日已完成区间累计成交额 ÷ 前最多 20
-                个完整交易日同刻均值，至少需要 5 日样本。1.3× 为放量观察，1.8×
-                且外内盘差占比 ≥ 8% 为重点观察。阈值为本站规则。
-              </li>
-              <li>
-                外内盘差估算 = 成交额 ×（外盘量 − 内盘量）÷（外盘量 +
-                内盘量）。方向分类受撮合、套利、对冲与数据口径影响。
-              </li>
-              <li>
-                实时行情来自腾讯财经公开接口，页面可见且自动刷新开启时每 20
-                秒请求一次。交易状态按北京时间工作日时段和行情时间推定，节假日或行情超过
-                3 分钟未更新会标记延迟。
-              </li>
-              <li>
-                历史日线与五分钟基线由 GitHub Actions
-                从东方财富初始化，并在收盘后校对。盘中由腾讯分时补充，同时保留历史缓存。页面同源读取云端快照。当日五分钟成交额由腾讯分时累计额差分还原，每
-                5
-                分钟更新。量能比较使用全池共同可用的已结束区间，并标明截止时间。
-              </li>
-              <li>
-                GitHub Actions 在工作日北京时间 交易时段
-                每五分钟尝试更新云端快照，并在 15:10
-                再次更新。任务可能受调度延迟和接口可用性影响。页面会优先直连，失败时保留带原始时间戳的快照。
-              </li>
-              <li>
-                部分 ETF 缺失或行情时间差超过 3
-                分钟时，显示可用子集成交额并暂缓综合信号。历史图仅合计 12
-                只均有记录的日期，当前未收盘交易日用浅色柱标明。
-              </li>
-              <li>
-                数据源为公开访问接口，可能延迟、限流或变更。页面会披露连接状态、行情时间及覆盖率。源代码和计算逻辑可在
-                GitHub 查看。
-              </li>
+              <li>观察池为中央汇金投资、中央汇金资产管理在 2025 年基金年报中被披露为持有人的 23 只境内 ETF（沪深300 4 只、上证50 2 只、中证500 3 只、中证1000 4 只、科创50 2 只、创业板 3 只、其他宽基 5 只）。年报披露滞后，名单是历史标签，不代表当前持仓。</li>
+              <li>刷新规则：交易时段（09:15–11:30、13:00–15:00，北京时间）每秒请求一次腾讯财经实时行情，交易所 Level-1 快照约 3 秒一跳，页面在 1 秒内反映；11:30 与 15:00 后再取几次确认最终数据，随后自动暂停，午休、收盘后、周末与休市日不再请求，13:00 与次一交易日 09:15 自动恢复。同一只 ETF 只接受时间更新的报价，不会回跳。行情时间与北京时间相差超过 3 分钟标记为延迟，并暂停综合结论。</li>
+              <li>逐分钟分时每 60 秒更新，腾讯分时与东方财富分时互为备份（任一源失败自动切换，失败源冷却 5 分钟）；两源逐分钟成交额一致。图表末端每秒随实时行情延伸。</li>
+              <li>同时点基线：对每只 ETF，取当日之前最多 20 个完整交易日（含 09:35 与 15:00 且 48 根 5 分钟线齐全）的累计成交额曲线求平均。5 分钟区间内部按近 4 个交易日 6 只主力 ETF 的真实逐分钟成交分布插值到秒（取不到时退回线性插值）。开盘后 5 分钟内集合竞价成交占比高，暂不计算倍数。</li>
+              <li>同时点进度 = 同时刻历史平均累计成交额 ÷ 历史平均全天成交额；「已达全天日均」= 今日成交额 ÷ 历史平均全天成交额。</li>
+              <li>池内涨跌与溢价率按当日成交额加权。IOPV 为交易所每 15 秒发布的参考净值，现金替代与成分股停牌会使其偏离。</li>
+              <li>放量脉冲：全池 1 分钟成交额 ≥ 同时段均值 3×（5× 为强脉冲）且 ≥ 1 亿元；单只 ETF 为 ≥ 4× 且 ≥ 0.5 亿元。「同时段均值」按该分钟在历史上的真实成交占比计算，因此开盘、午后第一分钟的天然放量不会误报。09:30 开盘集合竞价与 14:57 之后的收盘集合竞价不计。阈值为本站规则。</li>
+              <li>进场证据五项（命中即点亮）：全池放大倍数 ≥ 1.3×；沪深300 四只合计 ≥ 1.5×；主动净买入占成交 ≥ +3%；成交额加权溢价率 ≥ +0.10%；沪深300 指数低于昨收时出现全池放量拉升脉冲。结论标题沿用固定规则：≥ 1.8× 且净买入占比 ≥ 8% 为「疑似在上班」，≥ 1.3× 为放量观察，其余为常态。</li>
+              <li>历史 5 分钟线与日线由 GitHub Actions 从东方财富采集并部署为同源快照，收盘后校对；快照只作为分母与断线兜底，盘中数字以浏览器直连的实时行情为准。</li>
+              <li>所有指标均为公开行情的量价推断。交易账户身份、真实申购赎回与机构持仓以基金定期报告与独立披露为准。本页不构成投资建议。</li>
             </ul>
-            <div class="source-links">
-              <a
-                href="https://gu.qq.com/sh510300"
-                target="_blank"
-                rel="noopener noreferrer"
-                >腾讯财经行情 ↗</a
-              ><a
-                href="https://quote.eastmoney.com/sh510300.html"
-                target="_blank"
-                rel="noopener noreferrer"
-                >东方财富行情 ↗</a
-              ><a
-                href="https://www.stcn.com/article/detail/3316601.html"
-                target="_blank"
-                rel="noopener noreferrer"
-                >观察池历史披露参考 ↗</a
-              ><a
-                href="https://github.com/xkqin/national-team-etf-monitor/actions"
-                target="_blank"
-                rel="noopener noreferrer"
-                >云端更新记录 ↗</a
-              >
+            <div class="sources">
+              <a href="https://gu.qq.com/sh510300" target="_blank" rel="noopener noreferrer">腾讯财经行情 ↗</a>
+              <a href="https://quote.eastmoney.com/sh510300.html" target="_blank" rel="noopener noreferrer">东方财富行情 ↗</a>
+              <a href="https://finance.eastmoney.com/a/202603313690167766.html" target="_blank" rel="noopener noreferrer">汇金 2025 年末 ETF 持仓报道 ↗</a>
+              <a href="https://github.com/xkqin/national-team-etf-monitor" target="_blank" rel="noopener noreferrer">源代码 ↗</a>
             </div>
+          </details>
+
+          <a class="card astra" href="./astra/" target="_blank" rel="noopener noreferrer" aria-label="打开 Astra 私人投资看板">
+            <span class="astra-icon" aria-hidden="true">✳</span>
+            <span class="astra-copy">
+              <span class="kicker">ASTRA · PRIVATE DASHBOARD</span>
+              <strong>你的投资工作台</strong>
+              <small>流程报告 · 投资组合 · 交易流水 · 研究报告 · 密码解锁</small>
+            </span>
+            <span class="astra-go">进入看板 ↗</span>
+          </a>
+
+          <div class="health">
+            <span><i class="health-dot" id="health-dot"></i><span id="source-state">数据源连接中</span></span>
+            <span id="snapshot-time">云端快照加载中</span>
           </div>
-        </details>
-        <div class="data-health">
-          <span
-            ><i class="small-dot"></i
-            ><span id="source-state">数据源连接中</span></span
-          ><span id="snapshot-time">云端快照加载中</span>
         </div>
       </section>
-      <footer>
-        <span
-          >国家队 ETF 观察站 <span class="footer-dot">·</span> 宽基 ETF
-          实时观察</span
-        ><span>公开数据观察工具 · 投资决策需结合独立信息</span>
-      </footer>
     </main>
+
+    <footer class="footer">
+      <div class="wrap">
+        <span>国家队 ETF 观察站 · 宽基 ETF 盘中实时观察</span>
+        <span>公开数据观察工具 · 投资决策需结合独立信息</span>
+      </div>
+    </footer>
+
+    <div class="tooltip" id="tooltip" role="tooltip" hidden></div>
   </body>
 </html>

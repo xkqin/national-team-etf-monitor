@@ -11,6 +11,18 @@ import {
   aggregate,
   signalFor,
   minuteToFiveMinute,
+  tradingMinute,
+  clockFor,
+  intradayProfile,
+  profileAt,
+  expectedMinuteAmount,
+  liveSummary,
+  parseMinuteLines,
+  poolMinutes,
+  fundPulses,
+  minuteShape,
+  sessionPhase,
+  parseTrendLines,
 } from "../public/core.js";
 
 test("Tencent cumulative amounts convert to equivalent five-minute turnover", () => {
@@ -265,8 +277,12 @@ test("actual collected snapshot has all funds and usable history", async () => {
   );
   const summary = aggregate(pool, snapshot.quotes, snapshot.history);
   assert.equal(summary.complete, true);
-  assert.equal(summary.rows.length, 12);
+  assert.equal(summary.rows.length, pool.length);
+  assert.equal(new Set(pool.map((item) => item.symbol)).size, pool.length);
   assert.ok(summary.amount > 0);
+  const live = liveSummary(pool, snapshot.quotes, snapshot.history);
+  assert.ok(live.rows.every((row) => row.profile && row.profile.days >= 5));
+  assert.ok(live.fullDay > 0);
   assert.ok(
     pool.every((item) => snapshot.history[item.symbol].daily.length >= 200),
   );
@@ -277,4 +293,167 @@ test("actual collected snapshot has all funds and usable history", async () => {
           .length >= 5,
     ),
   );
+});
+
+test("trading-minute clock skips lunch and clamps to the session", () => {
+  assert.equal(tradingMinute("0915"), 0);
+  assert.equal(tradingMinute("093000"), 0);
+  assert.equal(tradingMinute("1043"), 73);
+  assert.equal(tradingMinute("104330"), 73.5);
+  assert.equal(tradingMinute("1130"), 120);
+  assert.equal(tradingMinute("1215"), 120);
+  assert.equal(tradingMinute("1301"), 121);
+  assert.equal(tradingMinute("15:00"), 240);
+  assert.equal(tradingMinute("1530"), 240);
+  assert.equal(clockFor(0), "09:30");
+  assert.equal(clockFor(120), "11:30");
+  assert.equal(clockFor(121), "13:01");
+  assert.equal(clockFor(240), "15:00");
+});
+
+test("live ratio compares quote turnover with the interpolated same-second baseline", () => {
+  const profile = intradayProfile(history.fiveMinute, "2026-11-06");
+  assert.equal(profile.days, 6);
+  assert.equal(profile.fullDay, 4800);
+  assert.equal(profileAt(profile, 0), 0);
+  assert.equal(profileAt(profile, 5), 100);
+  assert.equal(profileAt(profile, 7.5), 150);
+  assert.equal(profileAt(profile, 240), 4800);
+  assert.equal(expectedMinuteAmount(profile, 7), 20);
+  // 10:43:20 → minute 73.33…, baseline 1466.67; quote turnover 1e8 yuan
+  const pool = [fund];
+  const summary = liveSummary(pool, { [fund.symbol]: fields("20261106104320") }, { [fund.symbol]: history });
+  assert.ok(Math.abs(summary.baseline - 1466.6667) < 0.01);
+  assert.ok(Math.abs(summary.ratio - 1e8 / summary.baseline) < 1e-6);
+  assert.ok(Math.abs(summary.progress - summary.baseline / 4800) < 1e-9);
+  assert.equal(summary.dayRatio, 1e8 / 4800);
+  assert.equal(summary.comparisonLagMinutes, 0);
+  assert.equal(summary.clock, "10:43");
+});
+
+test("live ratio is withheld during the opening auction minutes", () => {
+  const summary = liveSummary([fund], { [fund.symbol]: fields("20261106093200") }, { [fund.symbol]: history });
+  assert.equal(summary.ratio, null);
+  assert.equal(signalFor(summary, { session: true, fresh: true }).label, "积累数据中");
+});
+
+test("premium is the turnover-weighted IOPV premium and stays null without IOPV", () => {
+  const a = fields("20261106104320");
+  a[78] = "3.992";
+  const b = fields("20261106104320");
+  b[37] = "30000";
+  b[78] = "4.004";
+  const other = { ...fund, symbol: "sz159919" };
+  const summary = liveSummary([fund, other], { [fund.symbol]: a, [other.symbol]: b }, { [fund.symbol]: history, [other.symbol]: history });
+  const pa = (4 / 3.992 - 1) * 100;
+  const pb = (4 / 4.004 - 1) * 100;
+  assert.ok(Math.abs(summary.premium - (pa * 1 + pb * 3) / 4) < 1e-12);
+  assert.equal(normalizeQuote(fields(), fund).premium, null);
+  // Exact turnover in yuan from field 35 wins over the 10k-yuan field 37.
+  const exact = fields();
+  exact[35] = "4.000/2500/100012345";
+  assert.equal(normalizeQuote(exact, fund).amount, 100012345);
+});
+
+test("minute lines become per-minute turnover and pulses ignore auction minutes", () => {
+  const lines = [
+    "0930 4.00 100 9000000000.00",
+    "0931 4.00 200 9000000010.00",
+    "0932 4.02 300 9500000010.00",
+    "0933 4.01 400 9500000020.00",
+  ];
+  const records = parseMinuteLines(lines);
+  assert.equal(records.length, 4);
+  assert.equal(records[0].amount, 9e9);
+  assert.equal(records[2].amount, 5e8);
+  assert.equal(records[2].minute, 2);
+  const profile = { points: Array.from({ length: 49 }, (_, i) => i * 5e7), days: 20, fullDay: 48 * 5e7 };
+  // expected per minute = 1e7; minute 2 trades 5e8 = 50×, price up
+  const series = poolMinutes({ x: records }, { x: profile }, ["x"]);
+  assert.equal(series[0].pulse, false);
+  assert.equal(series[2].pulse, true);
+  assert.equal(series[2].strong, true);
+  assert.ok(series[2].move > 0);
+  assert.equal(series[3].pulse, false);
+  const events = fundPulses({ symbol: "x", name: "X", group: "沪深300" }, records, profile);
+  assert.equal(events.length, 1);
+  assert.equal(events[0].clock, "09:32");
+});
+
+test("polling follows the Beijing session and pauses at lunch, after the close and on weekends", () => {
+  const at = (iso) => sessionPhase(new Date(iso));
+  assert.equal(at("2026-11-06T08:00:00+08:00").poll, 0);
+  assert.equal(at("2026-11-06T09:20:00+08:00").phase, "auction");
+  assert.equal(at("2026-11-06T10:00:00+08:00").poll, 1000);
+  assert.equal(at("2026-11-06T11:30:30+08:00").phase, "settle");
+  assert.equal(at("2026-11-06T12:00:00+08:00").poll, 0);
+  assert.equal(at("2026-11-06T13:00:00+08:00").poll, 1000);
+  assert.equal(at("2026-11-06T14:59:59+08:00").poll, 1000);
+  assert.equal(at("2026-11-06T15:01:00+08:00").phase, "settle");
+  assert.equal(at("2026-11-06T15:10:00+08:00").poll, 0);
+  assert.equal(at("2026-11-06T15:10:00+08:00").label, "已收盘");
+  assert.equal(at("2026-11-07T10:00:00+08:00").poll, 0);
+});
+
+test("minute shape spreads each five-minute bar by its real minute weights", () => {
+  const clocks = [];
+  for (let t = 570; t <= 690; t++) clocks.push(t);
+  for (let t = 780; t <= 900; t++) clocks.push(t);
+  let cumulative = 0;
+  const lines = clocks.map((t) => {
+    const clock = `${String(Math.floor(t / 60)).padStart(2, "0")}${String(t % 60).padStart(2, "0")}`;
+    cumulative += clock === "0930" ? 100 : clock === "0931" ? 50 : clock === "1300" ? 0 : 10;
+    return `${clock} 4.00 1 ${cumulative}`;
+  });
+  const shape = minuteShape([parseMinuteLines(lines), parseMinuteLines(lines.slice(0, 50))]);
+  assert.equal(shape.days, 1);
+  assert.ok(Math.abs(shape.weights[0] - 100 / 190) < 1e-12);
+  assert.ok(Math.abs(shape.weights[1] - 50 / 190) < 1e-12);
+  assert.ok(Math.abs(shape.weights[6] - 0.2) < 1e-12);
+  assert.ok(Math.abs(shape.weights[121] - 0.2) < 1e-12);
+  const profile = { points: Array.from({ length: 49 }, (_, i) => i * 5e7), days: 20, fullDay: 48 * 5e7 };
+  assert.ok(Math.abs(profileAt(profile, 0, shape) - 5e7 * (100 / 190)) < 1e-3);
+  assert.ok(Math.abs(profileAt(profile, 1, shape) - 5e7 * (150 / 190)) < 1e-3);
+  assert.ok(Math.abs(profileAt(profile, 5, shape) - 5e7) < 1e-3);
+  assert.ok(Math.abs(profileAt(profile, 7.5, shape) - 7.5e7) < 1e-3);
+  assert.ok(Math.abs(profileAt(profile, 240, shape) - 48 * 5e7) < 1e-3);
+  assert.ok(Math.abs(expectedMinuteAmount(profile, 1, shape) - 5e7 * (50 / 190)) < 1e-3);
+  // With a real shape, the first continuous minute is judged against its own weight.
+  const records = parseMinuteLines(["0930 4.00 1 100", "0931 4.01 2 200000100"]);
+  assert.equal(fundPulses({ symbol: "x", name: "X" }, records, profile, shape).length, 1);
+  assert.equal(fundPulses({ symbol: "x", name: "X" }, records, profile, null).length, 0);
+});
+
+test("Eastmoney and Tencent minute feeds produce the same aligned records", () => {
+  const tencent = parseMinuteLines([
+    "0930 4.149 163884 67995472.00",
+    "0931 4.155 1091253 453132540.00",
+    "1130 4.193 1200000 600000000.00",
+    "1300 4.193 1200000 600000000.00",
+    "1301 4.182 1300000 715944424.00",
+  ]);
+  const eastmoney = parseTrendLines([
+    "2026-11-05 09:30,0.000,4.149,163884,67995472.000",
+    "2026-11-05 09:31,0.000,4.155,927369,385137068.000",
+    "2026-11-05 11:30,0.000,4.193,56202,146867460.000",
+    "2026-11-05 13:01,0.000,4.182,277382,115944424.000",
+  ]).get("2026-11-05");
+  assert.deepEqual(tencent.map((r) => r.clock), ["09:30", "09:31", "11:30", "13:01"]);
+  assert.deepEqual(eastmoney.map((r) => r.clock), tencent.map((r) => r.clock));
+  tencent.forEach((record, i) => {
+    assert.ok(Math.abs(record.cumulative - eastmoney[i].cumulative) < 1);
+    assert.equal(record.minute, eastmoney[i].minute);
+  });
+  const profile = { points: Array.from({ length: 49 }, (_, i) => i * 5e7), days: 20, fullDay: 48 * 5e7 };
+  const series = poolMinutes({ a: tencent, b: eastmoney }, { a: profile, b: profile }, ["a", "b"]);
+  assert.equal(series.length, 4);
+  assert.ok(Math.abs(series[3].cumulative - 2 * 715944424) < 2);
+  // A fund that has not reported 13:01 yet stops the pool series there.
+  assert.equal(poolMinutes({ a: tencent, b: eastmoney.slice(0, 3) }, { a: profile, b: profile }, ["a", "b"]).length, 3);
+});
+
+test("post-close fixed-price lines are excluded from the session minutes", () => {
+  const records = parseMinuteLines(["1459 4 1 100", "1500 4 2 200", "1505 4 3 300", "1530 4 4 400"]);
+  assert.equal(records.at(-1).clock, "15:00");
+  assert.equal(records.length, 2);
 });
