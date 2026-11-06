@@ -174,6 +174,25 @@ h3 { font-size: 16px; font-weight: 600; }
 .overview-bottom h3 { margin: 6px 0; font-size: 18px; font-family: var(--font-display); }
 .overview-bottom p { color: var(--text-2); font-size: 14px; line-height: 1.85; }
 
+/* ---------- Returns ---------- */
+.asset-today { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin-top: 12px; font-size: 13px; color: var(--text-2); }
+.asset-today:empty { display: none; }
+.asset-today b { font-size: 16px; font-weight: 600; }
+.asset-today small { font-size: 11px; color: var(--muted); padding: 2px 8px; border-radius: 980px; background: #eef2f7; }
+.returns-card { padding: 22px 24px 16px; margin-top: 16px; }
+.returns-grid { display: grid; grid-template-columns: 1.3fr repeat(4, minmax(0, 1fr)); gap: 10px; margin: 16px 0 10px; }
+.returns-grid > div { background: var(--card2); border: 1px solid var(--line-2); border-radius: 16px; padding: 12px 14px; min-width: 0; display: grid; gap: 2px; }
+.returns-grid small { color: var(--muted); font-size: 12px; }
+.returns-grid b { font-family: var(--font-display); font-size: 22px; font-weight: 600; letter-spacing: -0.02em; white-space: nowrap; }
+.returns-grid span { font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.returns-grid .r-main { background: linear-gradient(135deg, rgba(10, 102, 214, .06), rgba(109, 74, 255, .06)); }
+.returns-grid .r-main b { font-size: 32px; }
+.returns-chart { position: relative; min-height: 190px; }
+.returns-chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+.returns-foot { margin-top: 6px; font-size: 11px; color: var(--muted); line-height: 1.6; }
+@media (max-width: 1190px) { .returns-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } .returns-grid .r-main { grid-column: span 3; } }
+@media (max-width: 600px) { .returns-card { padding: 18px 16px 12px; } .returns-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .returns-grid .r-main { grid-column: span 2; } .returns-grid b { font-size: 18px; } .returns-grid .r-main b { font-size: 28px; } }
+
 /* ---------- K-line ---------- */
 .kline-card { padding: 22px 24px 16px; margin-top: 16px; position: relative; }
 #view-portfolio .kline-card { margin: 0 0 22px; }

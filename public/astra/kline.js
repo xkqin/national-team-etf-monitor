@@ -10,6 +10,7 @@ window.AstraKline = (() => {
   // "600519", "SH600519", "sh600519", "600519.SH", "600519.SS" → Eastmoney secid
   function secid(code) {
     const text = String(code || '').trim().toUpperCase();
+    if (/^[01]\.\d{6}$/.test(text)) return text; // already an Eastmoney secid, e.g. 1.000300 (CSI 300)
     const digits = (text.match(/\d{6}/) || [])[0];
     if (!digits) return null;
     let market = /SH|SS/.test(text) ? '1' : /SZ|BJ/.test(text) ? '0' : null;
@@ -186,5 +187,23 @@ window.AstraKline = (() => {
     return { last, change: bars.at(-2) ? (last.close / bars.at(-2).close - 1) * 100 : null };
   }
 
-  return { load, render, secid };
+  // Live prices for many codes in one request: Map(secid → {price, prev, change, time}).
+  async function quotes(codes) {
+    const ids = [...new Set(codes.map(secid).filter(Boolean))];
+    if (!ids.length) return new Map();
+    const url = `https://push2.eastmoney.com/api/qt/ulist.np/get?fltt=2&invt=2&secids=${ids.join(',')}&fields=f2,f3,f12,f13,f18,f124&_=${Date.now()}`;
+    const response = await fetch(url, { cache: 'no-store', credentials: 'omit', referrerPolicy: 'no-referrer', signal: AbortSignal.timeout(10_000) });
+    if (!response.ok) throw new Error(`实时行情 HTTP ${response.status}`);
+    const payload = await response.json();
+    const out = new Map();
+    for (const row of payload?.data?.diff || []) {
+      const price = Number(row.f2);
+      const prev = Number(row.f18);
+      if (!(price > 0)) continue; // suspended or no trade yet
+      out.set(`${row.f13}.${row.f12}`, { price, prev: prev > 0 ? prev : null, change: Number(row.f3), time: Number(row.f124) * 1000 });
+    }
+    return out;
+  }
+
+  return { load, render, secid, quotes };
 })();
