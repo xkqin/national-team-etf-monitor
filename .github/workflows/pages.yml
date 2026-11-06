@@ -1,0 +1,52 @@
+name: Update ETF data and deploy Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    # Beijing time 09:30, 10:00 ... 14:30, 15:00, plus 15:10.
+    - cron: '30 1 * * 1-5'
+    - cron: '0,30 2-6 * * 1-5'
+    - cron: '0,10 7 * * 1-5'
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Collect current public data
+        id: collect
+        continue-on-error: true
+        run: python scripts/collect.py
+      - name: Record preserved snapshot
+        if: steps.collect.outcome == 'failure'
+        run: echo 'Public quote collection failed. Deploying the preserved snapshot with its original timestamp.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Verify calculations and data
+        run: npm test
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+      - name: Deploy GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
