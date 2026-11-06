@@ -1,73 +1,368 @@
 <!doctype html>
 <html lang="zh-CN">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#f7f8fa">
-  <meta name="description" content="跟踪12只宽基ETF的公开行情、历史同刻成交额与外内盘差，观察可能的异常交易活动。">
-  <title>国家队 ETF 观察站 · 实时量能监控</title>
-  <link rel="icon" type="image/svg+xml" href="./favicon.svg">
-  <link rel="stylesheet" href="./styles.css">
-  <script type="module" src="./app.js"></script>
-</head>
-<body>
-  <div class="top-line"></div>
-  <header class="site-header shell">
-    <a class="brand" href="./" aria-label="国家队ETF观察站首页">
-      <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 28 28"><path d="M4 18h4l3-10 5 15 3-11 2 6h3"/></svg></span>
-      <span>国家队 <b>ETF</b> 观察站<small>NATIONAL TEAM WATCH</small></span>
-    </a>
-    <nav aria-label="主导航"><a href="#overview">实时概览</a><a href="#funds">ETF 明细</a><a href="#methodology">数据口径 <span>↗</span></a></nav>
-    <a class="github-link" href="https://github.com/xkqin/national-team-etf-monitor" target="_blank" rel="noopener noreferrer" aria-label="查看GitHub源代码"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.22.68-.48v-1.86c-2.78.6-3.37-1.18-3.37-1.18-.46-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.61.07-.61 1 .07 1.53 1.03 1.53 1.03.89 1.52 2.34 1.08 2.91.83.09-.64.35-1.08.64-1.33-2.22-.25-4.55-1.11-4.55-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.65 0 0 .84-.27 2.75 1.03A9.6 9.6 0 0 1 12 6.82a9.6 9.6 0 0 1 2.5.34c1.91-1.3 2.75-1.03 2.75-1.03.55 1.38.2 2.4.1 2.65.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.69-4.57 4.94.36.31.68.92.68 1.85v2.76c0 .27.18.58.69.48A10 10 0 0 0 12 2Z"/></svg><span>GitHub</span></a>
-  </header>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f7f8fa" />
+    <meta
+      name="description"
+      content="跟踪12只宽基ETF的公开行情、历史同刻成交额与外内盘差，观察可能的异常交易活动。"
+    />
+    <title>国家队 ETF 观察站 · 实时量能监控</title>
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <link rel="stylesheet" href="./styles.css" />
+    <script type="module" src="./app.js"></script>
+  </head>
+  <body>
+    <div class="top-line"></div>
+    <header class="site-header shell">
+      <a class="brand" href="./" aria-label="国家队ETF观察站首页">
+        <span class="brand-mark" aria-hidden="true"
+          ><svg viewBox="0 0 28 28">
+            <path d="M4 18h4l3-10 5 15 3-11 2 6h3" /></svg
+        ></span>
+        <span>国家队 <b>ETF</b> 观察站<small>NATIONAL TEAM WATCH</small></span>
+      </a>
+      <nav aria-label="主导航">
+        <a href="#overview">实时概览</a><a href="#funds">ETF 明细</a
+        ><a href="#methodology">数据口径 <span>↗</span></a>
+      </nav>
+      <a
+        class="github-link"
+        href="https://github.com/xkqin/national-team-etf-monitor"
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label="查看GitHub源代码"
+        ><svg viewBox="0 0 24 24" aria-hidden="true">
+          <path
+            d="M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.22.68-.48v-1.86c-2.78.6-3.37-1.18-3.37-1.18-.46-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.61.07-.61 1 .07 1.53 1.03 1.53 1.03.89 1.52 2.34 1.08 2.91.83.09-.64.35-1.08.64-1.33-2.22-.25-4.55-1.11-4.55-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.65 0 0 .84-.27 2.75 1.03A9.6 9.6 0 0 1 12 6.82a9.6 9.6 0 0 1 2.5.34c1.91-1.3 2.75-1.03 2.75-1.03.55 1.38.2 2.4.1 2.65.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.69-4.57 4.94.36.31.68.92.68 1.85v2.76c0 .27.18.58.69.48A10 10 0 0 0 12 2Z"
+          /></svg
+        ><span>GitHub</span></a
+      >
+    </header>
 
-  <main class="shell">
-    <section class="page-heading" id="overview">
-      <div><p class="eyebrow"><span class="live-dot"></span> 宽基 ETF · 公开行情观察</p><h1>国家队，今天在上班吗<span>？</span></h1><p class="subtitle">从成交量里找线索，让每一次异动都有据可循。</p></div>
-      <div class="refresh-area"><div class="refresh-controls"><span id="market-badge" class="status-badge">连接行情中</span><button id="refresh" class="icon-button" aria-label="立即刷新行情" title="立即刷新"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M5.4 8a7 7 0 0 1 11.5-3L20 8M4 16l3.1 3A7 7 0 0 0 18.6 16"/></svg></button><button id="pause" class="plain-button" aria-pressed="false">暂停刷新</button></div><p id="update-time">正在获取最新数据…</p><span id="countdown">行情每 20 秒 · 量能每 5 分钟</span></div>
-    </section>
+    <main class="shell">
+      <section class="page-heading" id="overview">
+        <div>
+          <p class="eyebrow">
+            <span class="live-dot"></span> 宽基 ETF · 公开行情观察
+          </p>
+          <h1>国家队，今天在上班吗<span>？</span></h1>
+          <p class="subtitle">从成交量里找线索，让每一次异动都有据可循。</p>
+        </div>
+        <div class="refresh-area">
+          <div class="refresh-controls">
+            <span id="market-badge" class="status-badge">连接行情中</span
+            ><button
+              id="refresh"
+              class="icon-button"
+              aria-label="立即刷新行情"
+              title="立即刷新"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path
+                  d="M20 7v5h-5M4 17v-5h5M5.4 8a7 7 0 0 1 11.5-3L20 8M4 16l3.1 3A7 7 0 0 0 18.6 16"
+                />
+              </svg></button
+            ><button id="pause" class="plain-button" aria-pressed="false">
+              暂停刷新
+            </button>
+          </div>
+          <p id="update-time">正在获取最新数据…</p>
+          <span id="countdown">行情每 20 秒 · 量能每 5 分钟</span>
+        </div>
+      </section>
 
-    <div id="connection-alert" class="connection-alert" role="status" hidden></div>
+      <div
+        id="connection-alert"
+        class="connection-alert"
+        role="status"
+        hidden
+      ></div>
 
-    <section class="hero card" aria-labelledby="signal-title">
-      <div class="hero-main">
-        <div class="hero-copy"><p class="section-kicker">今日信号 <span id="signal-badge" class="pill">正在连接</span><span id="session-note" class="muted"></span></p><h2 id="signal-title">等待实时行情</h2><p id="signal-detail" class="hero-description">正在连接公开数据源，并加载历史同刻成交额基线。</p><div class="hero-meta"><span><i class="small-dot"></i><span id="coverage">12 只核心宽基 ETF</span></span><span id="baseline-note">前 20 个完整交易日同刻基线</span></div></div>
-        <div class="activity-panel"><div class="activity-ring" id="activity-ring"><div><strong id="ring-value">—</strong><span>同刻量能倍数</span></div></div><div class="ring-scale"><span>常态 &lt; 1.3×</span><span>放量 ≥ 1.3×</span></div></div>
-      </div>
-      <div class="metrics">
-        <article><div class="metric-label">观察池成交额 <span>01</span></div><p class="metric-value" id="total-amount">—<small>亿元</small></p><p class="metric-note" id="amount-note">按最新行情累计</p></article>
-        <article><div class="metric-label">同刻成交额倍数 <span>02</span></div><p class="metric-value" id="volume-ratio">—<small>×</small></p><p class="metric-note" id="ratio-note">已完成的五分钟区间</p></article>
-        <article><div class="metric-label">外内盘差估算 <span>03</span></div><p class="metric-value" id="net-flow">—<small>亿元</small></p><p class="metric-note">成交额 × 外内盘量差占比</p></article>
-        <article><div class="metric-label">池内加权涨跌 <span>04</span></div><p class="metric-value" id="weighted-change">—<small>%</small></p><p class="metric-note">按当日成交额加权</p></article>
-      </div>
-      <div class="hero-foot"><span class="info-icon">i</span><p>量价信号仅供观察，交易账户身份不可由公开行情确认。观察池依据历史披露选取。</p><a href="#methodology">了解计算口径 <span>→</span></a></div>
-    </section>
+      <section class="hero card" aria-labelledby="signal-title">
+        <div class="hero-main">
+          <div class="hero-copy">
+            <p class="section-kicker">
+              今日信号 <span id="signal-badge" class="pill">正在连接</span
+              ><span id="session-note" class="muted"></span>
+            </p>
+            <h2 id="signal-title">等待实时行情</h2>
+            <p id="signal-detail" class="hero-description">
+              正在连接公开数据源，并加载历史同刻成交额基线。
+            </p>
+            <div class="hero-meta">
+              <span
+                ><i class="small-dot"></i
+                ><span id="coverage">12 只核心宽基 ETF</span></span
+              ><span id="baseline-note">前 20 个完整交易日同刻基线</span>
+            </div>
+          </div>
+          <div class="activity-panel">
+            <div class="activity-ring" id="activity-ring">
+              <div>
+                <strong id="ring-value">—</strong><span>同刻量能倍数</span>
+              </div>
+            </div>
+            <div class="ring-scale">
+              <span>常态 &lt; 1.3×</span><span>放量 ≥ 1.3×</span>
+            </div>
+          </div>
+        </div>
+        <div class="metrics">
+          <article>
+            <div class="metric-label">观察池成交额 <span>01</span></div>
+            <p class="metric-value" id="total-amount">—<small>亿元</small></p>
+            <p class="metric-note" id="amount-note">按最新行情累计</p>
+          </article>
+          <article>
+            <div class="metric-label">同刻成交额倍数 <span>02</span></div>
+            <p class="metric-value" id="volume-ratio">—<small>×</small></p>
+            <p class="metric-note" id="ratio-note">已完成的五分钟区间</p>
+          </article>
+          <article>
+            <div class="metric-label">外内盘差估算 <span>03</span></div>
+            <p class="metric-value" id="net-flow">—<small>亿元</small></p>
+            <p class="metric-note">成交额 × 外内盘量差占比</p>
+          </article>
+          <article>
+            <div class="metric-label">池内加权涨跌 <span>04</span></div>
+            <p class="metric-value" id="weighted-change">—<small>%</small></p>
+            <p class="metric-note">按当日成交额加权</p>
+          </article>
+        </div>
+        <div class="hero-foot">
+          <span class="info-icon">i</span>
+          <p>
+            量价信号仅供观察，交易账户身份不可由公开行情确认。观察池依据历史披露选取。
+          </p>
+          <a href="#methodology">了解计算口径 <span>→</span></a>
+        </div>
+      </section>
 
-    <section class="charts-grid" aria-label="成交额图表">
-      <article class="card chart-card"><div class="chart-heading"><div><p class="section-kicker">INTRADAY VOLUME</p><h2>今天的量，走到哪里了？</h2><p>观察池累计成交额，与历史同刻均值对照</p></div><span class="chart-unit">单位 · 亿元</span></div><div class="chart-legend"><span><i class="legend-line coral"></i>当日累计</span><span><i class="legend-line dashed"></i>历史同刻均值</span></div><div id="intraday-chart" class="chart" aria-label="当日累计成交额与历史同刻均值折线图"></div><p class="chart-foot" id="intraday-foot">正在加载五分钟数据…</p></article>
-      <article class="card chart-card"><div class="chart-heading"><div><p class="section-kicker">HISTORICAL CONTEXT</p><h2>把今天，放进时间里</h2><p>观察池每日成交额，看看放量是否持续</p></div><div class="range-control" role="group" aria-label="历史图表区间"><button data-range="21">1月</button><button data-range="63" class="active" aria-pressed="true">3月</button><button data-range="250">1年</button></div></div><div class="chart-legend"><span><i class="legend-block coral"></i>日成交额</span><span><i class="legend-line dashed"></i>前 20 日均值</span></div><div id="history-chart" class="chart" aria-label="观察池历史每日成交额柱状图"></div><p class="chart-foot" id="history-foot">正在加载历史数据…</p></article>
-    </section>
+      <section class="charts-grid" aria-label="成交额图表">
+        <article class="card chart-card">
+          <div class="chart-heading">
+            <div>
+              <p class="section-kicker">INTRADAY VOLUME</p>
+              <h2>今天的量，走到哪里了？</h2>
+              <p>观察池累计成交额，与历史同刻均值对照</p>
+            </div>
+            <span class="chart-unit">单位 · 亿元</span>
+          </div>
+          <div class="chart-legend">
+            <span><i class="legend-line coral"></i>当日累计</span
+            ><span><i class="legend-line dashed"></i>历史同刻均值</span>
+          </div>
+          <div
+            id="intraday-chart"
+            class="chart"
+            aria-label="当日累计成交额与历史同刻均值折线图"
+          ></div>
+          <p class="chart-foot" id="intraday-foot">正在加载五分钟数据…</p>
+        </article>
+        <article class="card chart-card">
+          <div class="chart-heading">
+            <div>
+              <p class="section-kicker">HISTORICAL CONTEXT</p>
+              <h2>把今天，放进时间里</h2>
+              <p>观察池每日成交额，看看放量是否持续</p>
+            </div>
+            <div class="range-control" role="group" aria-label="历史图表区间">
+              <button data-range="21">1月</button
+              ><button data-range="63" class="active" aria-pressed="true">
+                3月</button
+              ><button data-range="250">1年</button>
+            </div>
+          </div>
+          <div class="chart-legend">
+            <span><i class="legend-block coral"></i>日成交额</span
+            ><span><i class="legend-line dashed"></i>前 20 日均值</span>
+          </div>
+          <div
+            id="history-chart"
+            class="chart"
+            aria-label="观察池历史每日成交额柱状图"
+          ></div>
+          <p class="chart-foot" id="history-foot">正在加载历史数据…</p>
+        </article>
+      </section>
 
-    <section class="groups-section" aria-labelledby="groups-title"><div class="section-heading"><h2 id="groups-title">资金在看哪一边<span> / 板块分布</span></h2><p>点击板块，筛选下方 ETF</p></div><div id="group-cards" class="group-grid"></div></section>
+      <section class="groups-section" aria-labelledby="groups-title">
+        <div class="section-heading">
+          <h2 id="groups-title">资金在看哪一边<span> / 板块分布</span></h2>
+          <p>点击板块，筛选下方 ETF</p>
+        </div>
+        <div id="group-cards" class="group-grid"></div>
+      </section>
 
-    <section class="card funds-section" id="funds" aria-labelledby="funds-title">
-      <div class="funds-heading"><div><p class="section-kicker">THE WATCHLIST</p><h2 id="funds-title">每一只 ETF，都看得见</h2><p id="table-summary">12 只核心宽基 ETF · 按成交额排序</p></div><label class="search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg><input id="search" type="search" placeholder="搜索名称 / 代码" aria-label="搜索ETF名称或代码"></label></div>
-      <div class="filter-row" id="filters" role="group" aria-label="ETF指数分类筛选"></div>
-      <div class="table-scroll"><table><thead><tr><th>ETF / 代码</th><th>跟踪指数</th><th><button data-sort="price">最新价 <span>↕</span></button></th><th><button data-sort="change">涨跌幅 <span>↕</span></button></th><th aria-sort="descending"><button data-sort="amount">成交额 <span>↓</span></button></th><th><button data-sort="ratio">同刻倍数 <span>↕</span></button></th><th><button data-sort="flow">外内盘差估算 <span>↕</span></button></th><th>行情时间</th></tr></thead><tbody id="fund-rows"><tr><td colspan="8" class="empty-state">正在连接行情…</td></tr></tbody></table></div>
-      <div class="table-foot"><span id="row-count">显示 0 / 12 只</span><span>红涨绿跌 · 点击 ETF 名称查看行情详情 ↗</span></div>
-    </section>
+      <section
+        class="card funds-section"
+        id="funds"
+        aria-labelledby="funds-title"
+      >
+        <div class="funds-heading">
+          <div>
+            <p class="section-kicker">THE WATCHLIST</p>
+            <h2 id="funds-title">每一只 ETF，都看得见</h2>
+            <p id="table-summary">12 只核心宽基 ETF · 按成交额排序</p>
+          </div>
+          <label class="search"
+            ><svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="10.5" cy="10.5" r="6.5" />
+              <path d="m16 16 5 5" /></svg
+            ><input
+              id="search"
+              type="search"
+              placeholder="搜索名称 / 代码"
+              aria-label="搜索ETF名称或代码"
+          /></label>
+        </div>
+        <div
+          class="filter-row"
+          id="filters"
+          role="group"
+          aria-label="ETF指数分类筛选"
+        ></div>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>ETF / 代码</th>
+                <th>跟踪指数</th>
+                <th>
+                  <button data-sort="price">最新价 <span>↕</span></button>
+                </th>
+                <th>
+                  <button data-sort="change">涨跌幅 <span>↕</span></button>
+                </th>
+                <th aria-sort="descending">
+                  <button data-sort="amount">成交额 <span>↓</span></button>
+                </th>
+                <th>
+                  <button data-sort="ratio">同刻倍数 <span>↕</span></button>
+                </th>
+                <th>
+                  <button data-sort="flow">外内盘差估算 <span>↕</span></button>
+                </th>
+                <th>行情时间</th>
+              </tr>
+            </thead>
+            <tbody id="fund-rows">
+              <tr>
+                <td colspan="8" class="empty-state">正在连接行情…</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="table-foot">
+          <span id="row-count">显示 0 / 12 只</span
+          ><span>红涨绿跌 · 点击 ETF 名称查看行情详情 ↗</span>
+        </div>
+      </section>
 
-    <section id="methodology" class="methodology card">
-      <div class="method-heading"><div><p class="section-kicker">TRANSPARENT BY DESIGN</p><h2>数据从哪来，信号怎么算</h2></div><span class="pill subtle">口径公开 · 来源可查</span></div>
-      <div class="method-grid">
-        <article><span class="method-number">01</span><h3>先看量能，再看方向</h3><p>同刻倍数 = 当日已完成五分钟区间累计成交额 ÷ 过去最多 20 个完整交易日同刻均值，至少需要 5 日样本。1.3× 进入放量观察，1.8× 且外内盘差占比 ≥ 8% 标记重点观察。阈值为本站观察规则。</p></article>
-        <article><span class="method-number">02</span><h3>把“估算”写清楚</h3><p>外内盘差估算 = 成交额 ×（外盘量 − 内盘量）÷（外盘量 + 内盘量）。这是基于成交方向分类的近似值，可能受撮合、套利、对冲和数据口径影响。交易账户、真实净申购和国家队持仓需依赖独立披露。</p></article>
-        <article><span class="method-number">03</span><h3>历史标签，持续观察</h3><p>观察池为 12 只核心宽基 ETF，参考 2025 年半年报相关汇金增持报道。历史标签存在披露滞后，当前持仓需核对最新基金报告。本站用成交额呈现历史活动。</p></article>
-      </div>
-      <details><summary>数据源、刷新与完整性说明 <span>＋</span></summary><div class="method-details"><ul><li>实时行情来自腾讯财经公开接口，页面可见且自动刷新开启时每 20 秒请求一次。交易状态按北京时间工作日时段和行情时间推定，节假日或行情超过 3 分钟未更新会标记延迟。</li><li>日线与五分钟成交额来自东方财富公开接口。五分钟数据每 5 分钟更新，日线缓存每日更新。量能比较使用所有 ETF 共同可用、已结束的区间，标题下方标明比较截止时间。</li><li>GitHub Actions 在工作日北京时间 09:30—15:00 每半小时尝试更新云端快照，并在 15:10 再次更新。任务可能受调度延迟和接口可用性影响。页面会优先直连，失败时保留带原始时间戳的快照。</li><li>部分 ETF 缺失或行情时间差超过 3 分钟时，显示可用子集成交额并暂缓综合信号。历史图仅合计 12 只均有记录的日期，当前未收盘交易日用浅色柱标明。</li><li>数据源为公开访问接口，可能延迟、限流或变更。页面会披露连接状态、行情时间及覆盖率。源代码和计算逻辑可在 GitHub 查看。</li></ul><div class="source-links"><a href="https://gu.qq.com/sh510300" target="_blank" rel="noopener noreferrer">腾讯财经行情 ↗</a><a href="https://quote.eastmoney.com/sh510300.html" target="_blank" rel="noopener noreferrer">东方财富行情 ↗</a><a href="https://www.stcn.com/article/detail/3316601.html" target="_blank" rel="noopener noreferrer">观察池历史披露参考 ↗</a><a href="https://github.com/xkqin/national-team-etf-monitor/actions" target="_blank" rel="noopener noreferrer">云端更新记录 ↗</a></div></div></details>
-      <div class="data-health"><span><i class="small-dot"></i><span id="source-state">数据源连接中</span></span><span id="snapshot-time">云端快照加载中</span></div>
-    </section>
-    <footer><span>国家队 ETF 观察站 <span class="footer-dot">·</span> 看见异动，保留判断。</span><span>公开数据观察工具 · 投资决策需结合独立信息</span></footer>
-  </main>
-</body>
+      <section id="methodology" class="methodology card">
+        <div class="method-heading">
+          <div>
+            <p class="section-kicker">TRANSPARENT BY DESIGN</p>
+            <h2>数据从哪来，信号怎么算</h2>
+          </div>
+          <span class="pill subtle">口径公开 · 来源可查</span>
+        </div>
+        <div class="method-grid">
+          <article>
+            <span class="method-number">01</span>
+            <h3>先看量能，再看方向</h3>
+            <p>
+              同刻倍数 = 当日已完成五分钟区间累计成交额 ÷ 过去最多 20
+              个完整交易日同刻均值，至少需要 5 日样本。1.3× 进入放量观察，1.8×
+              且外内盘差占比 ≥ 8% 标记重点观察。阈值为本站观察规则。
+            </p>
+          </article>
+          <article>
+            <span class="method-number">02</span>
+            <h3>把“估算”写清楚</h3>
+            <p>
+              外内盘差估算 = 成交额 ×（外盘量 − 内盘量）÷（外盘量 +
+              内盘量）。这是基于成交方向分类的近似值，可能受撮合、套利、对冲和数据口径影响。交易账户、真实净申购和国家队持仓需依赖独立披露。
+            </p>
+          </article>
+          <article>
+            <span class="method-number">03</span>
+            <h3>历史标签，持续观察</h3>
+            <p>
+              观察池为 12 只核心宽基 ETF，参考 2025
+              年半年报相关汇金增持报道。历史标签存在披露滞后，当前持仓需核对最新基金报告。本站用成交额呈现历史活动。
+            </p>
+          </article>
+        </div>
+        <details>
+          <summary>数据源、刷新与完整性说明 <span>＋</span></summary>
+          <div class="method-details">
+            <ul>
+              <li>
+                实时行情来自腾讯财经公开接口，页面可见且自动刷新开启时每 20
+                秒请求一次。交易状态按北京时间工作日时段和行情时间推定，节假日或行情超过
+                3 分钟未更新会标记延迟。
+              </li>
+              <li>
+                日线与五分钟成交额来自东方财富公开接口。五分钟数据每 5
+                分钟更新，日线缓存每日更新。量能比较使用所有 ETF
+                共同可用、已结束的区间，标题下方标明比较截止时间。
+              </li>
+              <li>
+                GitHub Actions 在工作日北京时间 09:30—15:00
+                每半小时尝试更新云端快照，并在 15:10
+                再次更新。任务可能受调度延迟和接口可用性影响。页面会优先直连，失败时保留带原始时间戳的快照。
+              </li>
+              <li>
+                部分 ETF 缺失或行情时间差超过 3
+                分钟时，显示可用子集成交额并暂缓综合信号。历史图仅合计 12
+                只均有记录的日期，当前未收盘交易日用浅色柱标明。
+              </li>
+              <li>
+                数据源为公开访问接口，可能延迟、限流或变更。页面会披露连接状态、行情时间及覆盖率。源代码和计算逻辑可在
+                GitHub 查看。
+              </li>
+            </ul>
+            <div class="source-links">
+              <a
+                href="https://gu.qq.com/sh510300"
+                target="_blank"
+                rel="noopener noreferrer"
+                >腾讯财经行情 ↗</a
+              ><a
+                href="https://quote.eastmoney.com/sh510300.html"
+                target="_blank"
+                rel="noopener noreferrer"
+                >东方财富行情 ↗</a
+              ><a
+                href="https://www.stcn.com/article/detail/3316601.html"
+                target="_blank"
+                rel="noopener noreferrer"
+                >观察池历史披露参考 ↗</a
+              ><a
+                href="https://github.com/xkqin/national-team-etf-monitor/actions"
+                target="_blank"
+                rel="noopener noreferrer"
+                >云端更新记录 ↗</a
+              >
+            </div>
+          </div>
+        </details>
+        <div class="data-health">
+          <span
+            ><i class="small-dot"></i
+            ><span id="source-state">数据源连接中</span></span
+          ><span id="snapshot-time">云端快照加载中</span>
+        </div>
+      </section>
+      <footer>
+        <span
+          >国家队 ETF 观察站
+          <span class="footer-dot">·</span> 看见异动，保留判断。</span
+        ><span>公开数据观察工具 · 投资决策需结合独立信息</span>
+      </footer>
+    </main>
+  </body>
 </html>
