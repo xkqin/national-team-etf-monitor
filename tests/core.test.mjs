@@ -23,7 +23,17 @@ import {
   minuteShape,
   sessionPhase,
   parseTrendLines,
+  minuteFeedMode,
 } from "../public/core.js";
+
+test("a five-minute first paint does not report failed minute feeds before requests finish", () => {
+  const coarse = { hasRecords: true, coarse: true };
+  assert.equal(minuteFeedMode({ ...coarse, attempted: false, loading: false }), "loading");
+  assert.equal(minuteFeedMode({ ...coarse, attempted: true, loading: true }), "loading");
+  assert.equal(minuteFeedMode({ ...coarse, attempted: true, loading: false }), "snapshot");
+  assert.equal(minuteFeedMode({ hasRecords: true, coarse: false, attempted: true, loading: true }), "minute");
+  assert.equal(minuteFeedMode({ hasRecords: false, coarse: false, attempted: false, loading: false }), "loading");
+});
 
 test("Tencent cumulative amounts convert to equivalent five-minute turnover", () => {
   const bars = minuteToFiveMinute("20261106", [

@@ -4,6 +4,7 @@
 // Requested only after the snapshot is unlocked; only the stock code leaves the browser.
 window.AstraKline = (() => {
   const cache = new Map();
+  const pending = new Map();
   const TTL = 60_000;
   const UP = '#e3342f', DOWN = '#0e9b6a';
 
@@ -18,26 +19,61 @@ window.AstraKline = (() => {
     return `${market}.${digits}`;
   }
 
+  function symbolFor(id) {
+    if (id.startsWith('1.')) return `sh${id.slice(2)}`;
+    return `${/^[489]/.test(id.slice(2)) ? 'bj' : 'sz'}${id.slice(2)}`;
+  }
+
   async function load(code, count = 160) {
     const id = secid(code);
     if (!id) throw new Error('无法识别的证券代码');
     const key = `${id}|${count}`;
     const hit = cache.get(key);
     if (hit && Date.now() - hit.at < TTL) return hit.bars;
+    if (pending.has(key)) return pending.get(key);
+    const request = loadBars(id, count).then((bars) => {
+      cache.set(key, { at: Date.now(), bars });
+      return bars;
+    });
+    pending.set(key, request);
+    try {
+      return await request;
+    } finally {
+      pending.delete(key);
+    }
+  }
+
+  async function loadBars(id, count) {
     const url = `https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=${id}&klt=101&fqt=0&end=20500101&lmt=${count + 20}&fields1=f1,f2,f3&fields2=f51,f52,f53,f54,f55,f56,f57&_=${Date.now()}`;
+    try {
+      const payload = await readJson(url);
+      const bars = candles(payload?.data?.klines?.map((line) => line.split(',')), '东方财富');
+      if (!bars.length) throw new Error('东方财富没有返回日线');
+      return bars;
+    } catch {
+      const symbol = symbolFor(id);
+      // The final empty adjustment field requests unadjusted day bars.
+      const payload = await readJson(`https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=${symbol},day,,,${count + 20},`);
+      const bars = candles(payload?.data?.[symbol]?.day, '腾讯');
+      if (!bars.length) throw new Error('日线行情暂不可用，东方财富与腾讯均未返回有效数据');
+      return bars;
+    }
+  }
+
+  async function readJson(url) {
     const response = await fetch(url, { cache: 'no-store', credentials: 'omit', referrerPolicy: 'no-referrer', signal: AbortSignal.timeout(12_000) });
     if (!response.ok) throw new Error(`行情接口 HTTP ${response.status}`);
-    const payload = await response.json();
-    const lines = payload?.data?.klines;
-    if (!Array.isArray(lines) || !lines.length) throw new Error('行情接口没有返回 K 线');
-    const bars = lines
+    return response.json();
+  }
+
+  function candles(lines, source) {
+    return (Array.isArray(lines) ? lines : [])
       .map((line) => {
-        const [date, open, close, high, low, volume, amount] = line.split(',');
-        return { date, open: +open, close: +close, high: +high, low: +low, volume: +volume, amount: +amount };
+        const [date, open, close, high, low, volume, amount] = line;
+        return { date, open: +open, close: +close, high: +high, low: +low, volume: +volume, amount: amount === undefined ? null : +amount, source };
       })
-      .filter((bar) => bar.open > 0 && bar.high > 0 && bar.low > 0 && bar.close > 0);
-    cache.set(key, { at: Date.now(), bars, name: payload.data.name });
-    return bars;
+      .filter((bar) => /^\d{4}-\d{2}-\d{2}$/.test(bar.date) && [bar.open, bar.high, bar.low, bar.close, bar.volume].every(Number.isFinite) && bar.open > 0 && bar.high > 0 && bar.low > 0 && bar.close > 0)
+      .sort((a, b) => a.date.localeCompare(b.date));
   }
 
   const ma = (bars, n) => bars.map((_, i) => (i + 1 < n ? null : bars.slice(i + 1 - n, i + 1).reduce((s, b) => s + b.close, 0) / n));
@@ -192,16 +228,42 @@ window.AstraKline = (() => {
     const ids = [...new Set(codes.map(secid).filter(Boolean))];
     if (!ids.length) return new Map();
     const url = `https://push2.eastmoney.com/api/qt/ulist.np/get?fltt=2&invt=2&secids=${ids.join(',')}&fields=f2,f3,f12,f13,f18,f124&_=${Date.now()}`;
-    const response = await fetch(url, { cache: 'no-store', credentials: 'omit', referrerPolicy: 'no-referrer', signal: AbortSignal.timeout(10_000) });
-    if (!response.ok) throw new Error(`实时行情 HTTP ${response.status}`);
-    const payload = await response.json();
     const out = new Map();
-    for (const row of payload?.data?.diff || []) {
-      const price = Number(row.f2);
-      const prev = Number(row.f18);
-      if (!(price > 0)) continue; // suspended or no trade yet
-      out.set(`${row.f13}.${row.f12}`, { price, prev: prev > 0 ? prev : null, change: Number(row.f3), time: Number(row.f124) * 1000 });
+    try {
+      const payload = await readJson(url);
+      for (const row of payload?.data?.diff || []) {
+        const price = Number(row.f2);
+        const prev = Number(row.f18);
+        if (!(price > 0)) continue;
+        out.set(`${row.f13}.${row.f12}`, { price, prev: prev > 0 ? prev : null, change: Number(row.f3), time: Number(row.f124) * 1000 });
+      }
+    } catch {
+      // Keep any available quotes and obtain the missing symbols from Tencent below.
     }
+    const missing = ids.filter(id => !out.has(id));
+    if (missing.length) {
+      try {
+        const response = await fetch(`https://qt.gtimg.cn/q=${missing.map(symbolFor).join(',')}`, {
+          cache: 'no-store', credentials: 'omit', referrerPolicy: 'no-referrer', signal: AbortSignal.timeout(10_000),
+        });
+        if (!response.ok) throw new Error(`腾讯行情 HTTP ${response.status}`);
+        const bytes = await response.arrayBuffer();
+        const utf8 = new TextDecoder('utf-8').decode(bytes);
+        const text = utf8.includes('�') ? new TextDecoder('gb18030').decode(bytes) : utf8;
+        for (const match of text.matchAll(/v_((?:sh|sz|bj)\d{6})="([^"]*)"/g)) {
+          const fields = match[2].split('~');
+          const id = secid(match[1]);
+          const price = Number(fields[3]);
+          if (!missing.includes(id) || !(price > 0)) continue;
+          const stamp = fields[30] || '';
+          const time = /^\d{14}$/.test(stamp) ? Date.parse(`${stamp.slice(0,4)}-${stamp.slice(4,6)}-${stamp.slice(6,8)}T${stamp.slice(8,10)}:${stamp.slice(10,12)}:${stamp.slice(12,14)}+08:00`) : null;
+          out.set(id, { price, prev: Number(fields[4]) || null, change: Number(fields[32]), time });
+        }
+      } catch {
+        if (!out.size) throw new Error('实时报价暂不可用，估值将使用已取得的日线');
+      }
+    }
+    if (!out.size) throw new Error('实时行情未返回有效报价');
     return out;
   }
 

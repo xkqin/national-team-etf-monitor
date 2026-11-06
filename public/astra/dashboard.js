@@ -69,7 +69,7 @@ function renderKline(id){
   <div class="kline-stats"><div><small>持有 / 可卖</small><b>${esc(p.quantity)} / ${esc(p.available_quantity)}</b></div><div><small>持仓成本</small><b>${money(p.cost_price)}</b></div><div><small>浮动盈亏</small><b class="${cls(pnl)}">${signed(pnl)}${pnlPct!==null?` <em>${pnlPct>0?'+':''}${(pnlPct*100).toFixed(2)}%</em>`:''}</b></div><div><small>组合权重</small><b>${pct(weight)}</b></div><div><small>止损 / 支撑</small><b>${policy.stop_price?money(policy.stop_price):'—'} / ${policy.support_price?money(policy.support_price):'—'}</b></div><div><small>持有交易日</small><b>${esc(p.exit?.holding_trading_days??'—')}</b></div></div>
   <div class="kline-chips" role="tablist" aria-label="切换持仓">${list.map(x=>`<button data-kline-pick="${esc(x.stock_code)}" class="${x.stock_code===p.stock_code?'active':''}" role="tab" aria-selected="${x.stock_code===p.stock_code}">${esc(x.stock_name)}</button>`).join('')}</div>
   <div class="kline-chart" data-k-chart><div class="kline-loading">正在加载 K 线…</div></div>
-  <p class="kline-foot">行情：东方财富公开日 K（不复权，与成交价、成本价同口径），解锁后浏览器直连，只发送证券代码。▲ 买 / ▼ 卖为快照中的委托，实心 = 有成交；价格取核验成交均价，没有则取委托限价。</p>`;
+  <p class="kline-foot">行情来自东方财富公开日 K，腾讯日线备用，均为不复权。解锁后浏览器直连，只发送证券代码。▲ 买 / ▼ 卖为快照中的委托，实心 = 有成交；价格取核验成交均价，没有则取委托限价。</p>`;
   drawKline(el,p);
 }
 async function drawKline(el,p){
@@ -82,7 +82,7 @@ async function drawKline(el,p){
     const orders=data.orders.filter(o=>o.stock_code===p.stock_code).map(o=>({day:o.day,side:o.side,price:num(o.average_fill_price)??num(o.limit_price),quantity:o.quantity,filled:num(o.filled_quantity)||0,state:o.state}));
     const r=AstraKline.render(chart,bars,{show:klineRange,cost:num(p.cost_price),stop:num(policy.stop_price),support:num(policy.support_price),entryDate:p.exit?.entry_date,orders});
     const q=el.querySelector('[data-k-quote]');
-    if(q)q.innerHTML=`<b class="${cls(r.change)}">${r.last.close.toFixed(2)}</b><span class="${cls(r.change)}">${r.change===null?'':(r.change>0?'+':'')+r.change.toFixed(2)+'%'}</span><small>${esc(r.last.date)} · 东方财富</small>`;
+    if(q)q.innerHTML=`<b class="${cls(r.change)}">${r.last.close.toFixed(2)}</b><span class="${cls(r.change)}">${r.change===null?'':(r.change>0?'+':'')+r.change.toFixed(2)+'%'}</span><small>${esc(r.last.date)} · ${esc(r.last.source||'东方财富')}</small>`;
   }catch(error){if(el.dataset.token===token&&chart.isConnected)chart.innerHTML=`<div class="kline-loading">K 线暂不可用：${esc(error.message)}</div>`;}
 }
 function redrawKlines(){if(!data)return;const p=klinePosition();if(!p)return;for(const id of ['kline-overview','kline-portfolio']){const el=$(id);if(el&&el.offsetParent&&el.querySelector('[data-k-chart]'))drawKline(el,p);}}
@@ -115,77 +115,146 @@ function inSession(){const n=beijingNow();return n.weekday>0&&n.weekday<6&&((n.m
 const filledTrades=()=>data.orders.filter(o=>num(o.filled_quantity)>0).map(o=>({day:o.day,code:o.stock_code,side:o.side,qty:num(o.filled_quantity),price:num(o.average_fill_price)??num(o.limit_price),verified:num(o.average_fill_price)>0}));
 async function loadReturns(force=false){
   if(!data||returns.status==='loading')return;
-  if(!force&&returns.loadedAt&&Date.now()-returns.loadedAt<10*60e3){await refreshLive();return;}
-  returns.status='loading';
-  const codes=[...new Set([...data.snapshot.positions.map(p=>p.stock_code),...filledTrades().map(t=>t.code),HS300])];
-  const failed=[];
-  for(let i=0;i<codes.length;i+=4){
-    const batch=codes.slice(i,i+4);
-    const results=await Promise.allSettled(batch.map(c=>AstraKline.load(c,260)));
-    results.forEach((r,k)=>{if(r.status==='fulfilled')returns.bars.set(AstraKline.secid(batch[k]),r.value);else failed.push(batch[k]);});
+  const snapshot=data;
+  const request=returns;
+  const codes=[...new Set([...snapshot.snapshot.positions.map(p=>p.stock_code),...filledTrades().map(t=>t.code),HS300])];
+  const complete=codes.every(code=>request.bars.get(AstraKline.secid(code))?.length);
+  if(!force&&complete&&request.loadedAt&&Date.now()-request.loadedAt<10*60e3){
+    await refreshLive();
+    return;
   }
-  returns.failed=failed;returns.loadedAt=Date.now();returns.status='ready';
-  await refreshLive();
+  request.status='loading';
+  request.progress={done:0,total:codes.length};
+  renderReturns();
+  const failed=[];
+  try{
+    for(let i=0;i<codes.length;i+=4){
+      const batch=codes.slice(i,i+4);
+      const results=await Promise.allSettled(batch.map(code=>AstraKline.load(code,260)));
+      if(returns!==request||data!==snapshot)return;
+      results.forEach((result,index)=>{
+        if(result.status==='fulfilled'&&result.value.length)request.bars.set(AstraKline.secid(batch[index]),result.value);
+        else failed.push(batch[index]);
+      });
+      request.progress.done+=batch.length;
+      renderReturns();
+    }
+    request.failed=failed;
+    request.loadedAt=Date.now();
+    request.status='ready';
+    await refreshLive();
+  }catch(error){
+    if(returns===request&&data===snapshot){
+      request.status='error';
+      request.view=null;
+      request.error=error.message||'收益数据加载失败';
+      renderReturns();
+    }
+  }finally{
+    if(returns===request&&data&&data!==snapshot){
+      request.status='idle';
+      loadReturns();
+    }
+  }
 }
 async function refreshLive(){
   if(!data)return;
-  try{const codes=[...new Set([...data.snapshot.positions.map(p=>p.stock_code),HS300])];returns.live=await AstraKline.quotes(codes);returns.liveAt=Date.now();returns.error='';}
-  catch(error){returns.error=error.message;}
-  computeReturns();renderReturns();
+  const snapshot=data;
+  const request=returns;
+  try{
+    const codes=[...new Set([...snapshot.snapshot.positions.map(p=>p.stock_code),HS300])];
+    const quotes=await AstraKline.quotes(codes);
+    if(data!==snapshot||returns!==request)return;
+    request.live=quotes;
+    request.liveAt=Date.now();
+    request.error='';
+  }catch(error){
+    if(data!==snapshot||returns!==request)return;
+    request.error=error.message;
+  }
+  try{
+    computeReturns();
+    renderReturns();
+  }catch(error){
+    request.view=null;
+    request.status='error';
+    request.error='收益计算暂不可用 '+(error.message||'数据未齐备');
+    renderReturns();
+  }
 }
+document.addEventListener('click',event=>{
+  if(event.target.closest('[data-retry-returns]'))loadReturns(true);
+});
 function computeReturns(){
-  if(!data||!returns.bars.has(HS300)){returns.view=null;return;}
+  returns.view=null;
+  if(!data)return;
+  if(!returns.bars.get(HS300)?.length){returns.error='沪深300历史行情未取得，收益对比曲线暂缓。请点击重试。';return;}
   const total=num(data.snapshot.total_assets),ret=num(data.nav.return_since_initial);
-  const initial=total>0&&ret!==null?total/(1+ret):null;
+  const initial=total>0&&ret!==null&&1+ret>0?total/(1+ret):null;
+  if(!Number.isFinite(initial)||initial<=0){returns.error='初始资金或累计收益资料不足，暂缓计算收益曲线。';return;}
   const trades=filledTrades().sort((a,b)=>a.day.localeCompare(b.day));
   const closes=new Map();for(const [id,bars] of returns.bars)closes.set(id,bars);
   const idx=returns.bars.get(HS300),allDays=idx.map(b=>b.date);
   const first=trades.length?trades[0].day:data.snapshot.captured_at.slice(0,10);
-  const startIndex=Math.max(0,allDays.findIndex(d=>d>=first)-1);
+  const firstIndex=allDays.findIndex(d=>d>=first);
+  const startIndex=firstIndex<0?Math.max(0,allDays.length-1):Math.max(0,firstIndex-1);
   const days=allDays.slice(startIndex);
-  const today=days.at(-1);
-  const priceOn=(code,day)=>{const id=AstraKline.secid(code);if(day===today&&returns.live.has(id))return returns.live.get(id).price;const bars=closes.get(id);if(!bars)return null;let px=null;for(const b of bars){if(b.date>day)break;px=b.close;}return px;};
+  const today=beijingNow().date;
+  const quoteFor=(id,day)=>{const quote=returns.live.get(id);return quote&&Number.isFinite(quote.time)&&new Date(quote.time+8*3600e3).toISOString().slice(0,10)===day?quote:null;};
+  if(days.length&&days.at(-1)<today&&quoteFor(HS300,today))days.push(today);
+  if(!days.length){returns.error='缺少可用于收益估值的交易日资料。';return;}
+  const priceOn=(code,day)=>{const id=AstraKline.secid(code);if(day===today&&quoteFor(id,day))return quoteFor(id,day).price;const bars=closes.get(id);if(!bars)return null;let px=null;for(const b of bars){if(b.date>day)break;px=b.close;}return px;};
   let cash=num(data.snapshot.available_cash)+num(data.snapshot.frozen_cash);
   const hold=new Map(data.snapshot.positions.map(p=>[p.stock_code,num(p.quantity)]));
-  let pending=[...trades];const points=[];let missing=0;
+  let pending=[...trades];const points=[];let missing=0;const missingCodes=new Set();
   for(let i=days.length-1;i>=0;i--){
     const d=days[i];
     // undo every trade that happened after day d
     while(pending.length&&pending.at(-1).day>d){const t=pending.pop();if(t.side==='BUY'){cash+=t.qty*t.price;hold.set(t.code,(hold.get(t.code)||0)-t.qty);}else{cash-=t.qty*t.price;hold.set(t.code,(hold.get(t.code)||0)+t.qty);}}
     let value=cash,gap=0;
-    for(const [code,q] of hold){if(!q)continue;const px=priceOn(code,d);if(px===null){gap++;continue;}value+=q*px;}
+    for(const [code,q] of hold){if(!q)continue;const px=priceOn(code,d);if(px===null){gap++;missingCodes.add(code);continue;}value+=q*px;}
     missing+=gap;points.push({date:d,equity:value,holdings:new Map(hold),cash});
   }
+  if(missingCodes.size){returns.error=missingCodes.size+' 只证券缺少历史估值价格，暂缓收益曲线，避免漏算持仓。请点击重试。';return;}
   points.reverse();
   const base=points[0];
-  const idxClose=d=>{const id=HS300;if(d===today&&returns.live.has(id))return returns.live.get(id).price;return idx.find(b=>b.date===d)?.close??null;};
+  const idxClose=d=>{const id=HS300;if(d===today&&quoteFor(id,d))return quoteFor(id,d).price;return idx.find(b=>b.date===d)?.close??null;};
   const idx0=idxClose(base.date);
   points.forEach(p=>{p.ret=initial?p.equity/initial-1:null;p.bench=idx0?idxClose(p.date)/idx0-1:null;});
   let peak=-Infinity,maxDd=0;for(const p of points){peak=Math.max(peak,p.equity);maxDd=Math.max(maxDd,1-p.equity/peak);}
   const last=points.at(-1),prev=points.at(-2);
   // per-stock today: value change of today's holdings vs yesterday's, net of today's trades
   const perStock=new Map();
-  if(prev){const todayTrades=trades.filter(t=>t.day===today);
+  if(prev&&last.date===today){const todayTrades=trades.filter(t=>t.day===today);
     const codes=new Set([...last.holdings.keys(),...prev.holdings.keys()]);
     for(const code of codes){const qNow=last.holdings.get(code)||0,qPrev=prev.holdings.get(code)||0;const pNow=priceOn(code,today),pPrev=priceOn(code,prev.date);if(pNow===null||pPrev===null)continue;
       let pnl=qNow*pNow-qPrev*pPrev;for(const t of todayTrades.filter(t=>t.code===code))pnl+=t.side==='BUY'?-t.qty*t.price:t.qty*t.price;
       const live=returns.live.get(AstraKline.secid(code));perStock.set(code,{pnl,change:live?live.change:(pPrev?(pNow/pPrev-1)*100:null)});}}
   const cost=data.snapshot.positions.reduce((s,p)=>s+num(p.cost_price)*num(p.quantity),0);
   const floating=data.snapshot.positions.reduce((s,p)=>s+(num(p.unrealized_pnl)||0),0);
-  returns.view={points,initial,today,last,prev,todayPnl:prev?last.equity-prev.equity:null,todayPct:prev?last.equity/prev.equity-1:null,
+  returns.view={points,initial,today,last,prev,todayPnl:prev&&last.date===today?last.equity-prev.equity:null,todayPct:prev&&last.date===today?last.equity/prev.equity-1:null,
     cumPnl:initial?last.equity-initial:null,cumPct:last.ret,bench:last.bench,maxDd,floating,floatingPct:cost?floating/cost:null,perStock,
-    startGap:initial?base.equity/initial-1:null,missing,unverified:trades.filter(t=>!t.verified).length,tradeCount:trades.length,live:returns.live.size>0&&inSession()};
+    startGap:initial?base.equity/initial-1:null,missing,unverified:trades.filter(t=>!t.verified).length,tradeCount:trades.length,live:inSession()&&[HS300,...data.snapshot.positions.map(p=>AstraKline.secid(p.stock_code))].every(id=>{const quote=quoteFor(id,today);return quote&&Date.now()-quote.time>=-60000&&Date.now()-quote.time<=180000;})};
 }
 const yuan=v=>num(v)===null||!Number.isFinite(num(v))?'—':(num(v)>0?'+':num(v)<0?'−':'')+'¥'+Math.abs(num(v)).toLocaleString('zh-CN',{minimumFractionDigits:2,maximumFractionDigits:2});
 const pctSigned=(v,d=2)=>v===null||!Number.isFinite(v)?'—':(v>0?'+':'')+(v*100).toFixed(d)+'%';
 function renderReturns(){
+  if(!data)return;
   const v=returns.view,card=$('returns-card');
   const today=$('asset-today');
   if(today)today.innerHTML=v&&v.todayPnl!==null?`<span>今日</span><b class="${cls(v.todayPnl)}">${yuan(v.todayPnl)}</b><b class="${cls(v.todayPct)}">${pctSigned(v.todayPct)}</b><small>${v.live?'实时':'收盘'}</small>`:'';
   if(!card){renderPortfolio();return;}
-  if(!v){card.innerHTML=`<div class="card-top"><span class="card-kicker">组合收益</span></div><div class="kline-loading" style="min-height:160px">${returns.status==='loading'?'正在加载收益数据…':returns.error?'收益数据暂不可用：'+esc(returns.error):'正在加载收益数据…'}</div>`;return;}
+  if(!v){
+    const loading=returns.status==='loading';
+    const progress=returns.progress?` · ${returns.progress.done} / ${returns.progress.total}`:'';
+    const message=loading?`正在加载历史行情${progress}`:returns.error||'历史行情尚未齐备，请重试加载。';
+    card.innerHTML=`<div class="card-top"><span class="card-kicker">组合收益</span><button class="text-link" data-retry-returns ${loading?'disabled':''}>${loading?'加载中':'重试加载'}</button></div>
+      <p class="returns-foot">账户快照累计收益 ${pctSigned(data.nav?.return_since_initial)}。曲线将在历史估值资料齐备后显示。</p>
+      <div class="kline-loading" role="status">${esc(message)}</div>`;
+    return;
+  }
   const excess=v.cumPct!==null&&v.bench!==null?v.cumPct-v.bench:null;
-  card.innerHTML=`<div class="card-top"><span class="card-kicker">组合收益 · ${esc(v.points[0].date)} 起</span><span class="badge ${v.live?'':'neutral'}">${v.live?'● 实时 · 20 秒':'收盘价'}</span></div>
+  card.innerHTML=`<div class="card-top"><span class="card-kicker">组合收益 · 重建估算 · ${esc(v.points[0].date)} 起</span><span class="badge ${v.live?'':'neutral'}">${v.live?'● 实时估值 · 20 秒':'最近可用行情'}</span></div>
   <div class="returns-grid">
     <div class="r-main"><small>累计收益</small><b class="${cls(v.cumPct)}">${pctSigned(v.cumPct)}</b><span class="${cls(v.cumPnl)}">${yuan(v.cumPnl)}</span></div>
     <div><small>今日盈亏</small><b class="${cls(v.todayPnl)}">${yuan(v.todayPnl)}</b><span class="${cls(v.todayPct)}">${pctSigned(v.todayPct)}</span></div>
@@ -194,7 +263,7 @@ function renderReturns(){
     <div><small>最大回撤 · 按日收盘</small><b>${pctSigned(v.maxDd?-v.maxDd:0)}</b><span>快照：当前距峰值 ${pct(data.nav.drawdown)}</span></div>
   </div>
   <div class="returns-chart" id="returns-chart"></div>
-  <p class="returns-foot">曲线以当前账户现金与持仓为准，逐日倒推每天的委托并按当日收盘价估值（今日按实时价）。起点 ${esc(v.points[0].date)} 重建市值与初始资金 ${yuan(v.initial).replace('+','')} 相差 ${pctSigned(v.startGap)}，来自手续费与 ${v.unverified}/${v.tradeCount} 笔按委托限价估算的成交价。${returns.failed?.length?` ${returns.failed.length} 只证券行情缺失。`:''}</p>`;
+  <p class="returns-foot">曲线以当前账户现金与持仓为准，逐日倒推每天的委托并按当日收盘价估值（今日按最新可用价）。起点 ${esc(v.points[0].date)} 重建市值与初始资金 ${yuan(v.initial).replace('+','')} 相差 ${pctSigned(v.startGap)}。差异可能包含手续费、资金变动或历史资料缺口。${v.unverified}/${v.tradeCount} 笔成交价按委托限价估算。${returns.failed?.length?` ${returns.failed.length} 只证券行情缺失。`:''}</p>`;
   drawReturnsChart($('returns-chart'),v);
   renderPortfolio();
 }

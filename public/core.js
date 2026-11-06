@@ -1,5 +1,12 @@
 export const REFRESH_MS = 1_000;
 export const STALE_MS = 180_000;
+
+export function minuteFeedMode({ hasRecords, coarse, attempted, loading }) {
+  if (!hasRecords) return "loading";
+  if (!coarse) return "minute";
+  return !attempted || loading ? "loading" : "snapshot";
+}
+
 export const BAR_TIMES = Array.from({ length: 48 }, (_, index) => {
   const minutes = index < 24 ? 575 + index * 5 : 785 + (index - 24) * 5;
   return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
