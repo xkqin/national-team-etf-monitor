@@ -102,8 +102,8 @@ const state = {
 };
 
 /* ---------------- Data ---------------- */
-async function fetchText(url, timeout = 12_000) {
-  const response = await fetch(url, { signal: AbortSignal.timeout(timeout), cache: "no-store" });
+async function fetchText(url, timeout = 12_000, cache = "no-store") {
+  const response = await fetch(url, { signal: AbortSignal.timeout(timeout), cache });
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   const bytes = await response.arrayBuffer();
   const utf8 = new TextDecoder("utf-8").decode(bytes);
@@ -212,7 +212,9 @@ async function syncSnapshot() {
   state.snapshotLoading = true;
   state.lastSnapshot = Date.now();
   try {
-    const snapshot = JSON.parse(await fetchText(`./data/snapshot.json?_=${Date.now()}`, 30_000));
+    // A stable URL reuses Pages' ten-minute HTTP cache across visits and visitors.
+    // The scheduler requests it again after that cache lifetime has elapsed.
+    const snapshot = JSON.parse(await fetchText("./data/snapshot.json", 30_000, "default"));
     if (!snapshot.generatedAt || !snapshot.history) throw new Error("快照格式异常");
     if (snapshot.generatedAt !== state.snapshotAt) {
       state.history = snapshot.history;
@@ -1283,7 +1285,7 @@ setInterval(() => {
 // shape load in parallel and refine the numbers as soon as they arrive.
 async function init() {
   try {
-    state.pool = JSON.parse(await fetchText(`./pool.json?_=${Date.now()}`));
+    state.pool = JSON.parse(await fetchText("./pool.json", 12_000, "default"));
   } catch {
     $("conclusion-headline").textContent = "数据暂不可用";
     $("conclusion-summary").textContent = "页面配置加载失败，请检查网络后刷新。";
