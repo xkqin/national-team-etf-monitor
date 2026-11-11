@@ -12,12 +12,12 @@
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
     <link rel="preconnect" href="https://qt.gtimg.cn" crossorigin />
     <link rel="preconnect" href="https://push2his.eastmoney.com" crossorigin />
-    <link rel="modulepreload" href="./core.js?v=20261106g" />
+    <link rel="modulepreload" href="./core.js?v=20261111a" />
     <link rel="preload" href="./pool.json" as="fetch" crossorigin />
     <!-- Asset URLs carry a version so a new deploy never mixes with cached old files. -->
     <link rel="stylesheet" href="./fonts.css?v=20261106f" />
-    <link rel="stylesheet" href="./styles.css?v=20261106f" />
-    <script type="module" src="./app.js?v=20261109a"></script>
+    <link rel="stylesheet" href="./styles.css?v=20261111a" />
+    <script type="module" src="./app.js?v=20261111a"></script>
   </head>
   <body>
     <a class="skip" href="#main">跳到正文</a>
@@ -70,6 +70,12 @@
               <h1 id="conclusion-headline" class="headline level-neutral">正在读取数据</h1>
               <p class="hero-lede" id="conclusion-summary">正在同步实时行情与历史同时点基线。</p>
               <p class="hero-note" id="conclusion-note"></p>
+              <div class="activity">
+                <div class="activity-top"><span>量价活动强度</span><strong id="activity-label">等待判断</strong></div>
+                <div class="activity-meter" id="activity-meter" role="img" aria-label="等待强度数据"><i></i><i></i><i></i><i></i></div>
+                <div class="activity-scale" aria-hidden="true"><span>轻度</span><span>温和</span><span>积极</span><span>强力</span></div>
+                <p id="activity-peak" class="activity-peak">正在检查今日动作…</p>
+              </div>
               <div class="hero-tags">
                 <span class="tag" id="signal-badge">正在连接</span>
                 <span class="tag subtle" id="coverage">23 只宽基 ETF</span>
@@ -80,7 +86,7 @@
               <svg id="gauge" class="gauge" viewBox="0 0 240 150" role="img" aria-label="同时点放大倍数"></svg>
               <figcaption>
                 <strong id="gauge-value">—</strong>
-                <span>较同时点历史均值</span>
+                <span>全池全天量能 · 较历史同时点均值</span>
               </figcaption>
             </figure>
           </div>
@@ -242,8 +248,8 @@
             </article>
             <article class="card method-card">
               <span class="method-no">02</span>
-              <h3>主动净买入</h3>
-              <p>成交额 ×（外盘量 − 内盘量）÷（外盘量 + 内盘量）。≥ 1.8× 且净买入占成交 ≥ 8% 记为重点观察。方向受套利、对冲与撮合口径影响。</p>
+              <h3>上班，分程度</h3>
+              <p>看最近 5 / 15 分钟，沪深300 四只主力或全池的成交较历史同段达到 1.2 / 1.5 / 2 / 3 倍，依次为轻度、温和、积极、强力；同时要求价格上行与多只同步上涨。</p>
             </article>
             <article class="card method-card">
               <span class="method-no">03</span>
@@ -261,7 +267,9 @@
               <li>同时点进度 = 同时刻历史平均累计成交额 ÷ 历史平均全天成交额；「已达全天日均」= 今日成交额 ÷ 历史平均全天成交额。</li>
               <li>池内涨跌与溢价率按当日成交额加权。IOPV 为交易所每 15 秒发布的参考净值，现金替代与成分股停牌会使其偏离。</li>
               <li>放量脉冲：全池 1 分钟成交额 ≥ 同时段均值 3×（5× 为强脉冲）且 ≥ 1 亿元；单只 ETF 为 ≥ 4× 且 ≥ 0.5 亿元。「同时段均值」按该分钟在历史上的真实成交占比计算，因此开盘、午后第一分钟的天然放量不会误报。09:30 开盘集合竞价与 14:57 之后的收盘集合竞价不计。阈值为本站规则。</li>
-              <li>进场证据五项（命中即点亮）：全池放大倍数 ≥ 1.3×；沪深300 四只合计 ≥ 1.5×；主动净买入占成交 ≥ +3%；成交额加权溢价率 ≥ +0.10%；沪深300 指数低于昨收时出现全池放量拉升脉冲。结论标题沿用固定规则：≥ 1.8× 且净买入占比 ≥ 8% 为「疑似在上班」，≥ 1.3× 为放量观察，其余为常态。</li>
+              <li>活动强度：取沪深300 四只主力与完整 23 只观察池最近已完成的 5 / 15 交易分钟区间，成交额除以前 20 个完整交易日同段均值。≥ 1.2 / 1.5 / 2 / 3× 对应 1–4 级；区间成交额须达到主力每 5 分钟 0.5 亿、全池每 5 分钟 1 亿，15 分钟门槛乘三；成交额加权区间涨幅 ≥ 0.02%，至少一半 ETF 上涨，3–4 级至少四分之三上涨。15 分钟信号要求最近 5 分钟价格未下行。按级别、结束时间、较短区间排序取最强有效信号。阈值为本站启发式规则，未经过机构身份标注验证，不代表概率。</li>
+              <li>当前强度与今日最强分别展示。全天累计量能仅作背景，不再限制近期信号。开盘前 5 分钟、跨午休区间与收盘集合竞价不参与强度判断；开盘至少积累 10 分钟。任一主力缺失、分钟区间有缺口或落后超过 3 个交易分钟时，强度显示待判断，五分钟云端快照不用于强度推断。收盘后显示最后连续竞价区间的强度与时间。</li>
+              <li>五项辅助证据：近期放量、价格同步上行、全天外内盘差占成交 ≥ +3%、加权溢价 ≥ +0.10%、今日指数低于昨收时出现放量拉升。它们展示不同时间范围的背景，命中数不是机构概率，也不直接相加生成强度。主动净买入为成交额 ×（外盘量 − 内盘量）÷（外盘量 + 内盘量），方向受套利、对冲与撮合口径影响。</li>
               <li>历史 5 分钟线与日线由 GitHub Actions 从东方财富采集并部署为同源快照，收盘后校对；快照只作为分母与断线兜底，盘中数字以浏览器直连的实时行情为准。</li>
               <li>所有指标均为公开行情的量价推断。交易账户身份、真实申购赎回与机构持仓以基金定期报告与独立披露为准。本页不构成投资建议。</li>
             </ul>

@@ -612,7 +612,87 @@ export function aggregate(funds, quotes, history) {
   };
 }
 
-export function signalFor(summary, state) {
+export const ACTIVITY = {
+  thresholds: [1.2, 1.5, 2, 3],
+  labels: ["未见明显动作", "轻度试探", "温和发力", "积极进场", "明显加力"],
+  maxLag: 3,
+  minMove: 0.0002,
+};
+
+// Current activity uses completed 5/15-minute windows, not the day's cumulative ratio.
+// Require every fund in the selected scope at both endpoints; gaps are unknown, never zero.
+export function activityFor(rows, minuteMap, minute, shape = null) {
+  const unavailable = (reason) => ({ available: false, reason, current: null, peak: null });
+  if (!Number.isFinite(minute) || minute < 10) return unavailable("开盘后积累至少 10 分钟再判断");
+  const core = rows.filter((row) => row.group === "沪深300");
+  if (core.length !== 4) return unavailable("等待四只沪深300 ETF 行情");
+  // Exclude the unfinished minute and the closing auction. At lunch the last minute is final.
+  const cutoff = Math.min(236, Math.floor(minute) - (minute === 120 || minute === 240 ? 0 : 1));
+  const maps = new Map(rows.map((row) => [row.symbol, new Map(
+    (minuteMap[row.symbol] || []).map((record) => [record.minute, record]),
+  )]));
+  const ready = (scope) => scope.every((row) => row.profile && maps.get(row.symbol)?.size);
+  if (!ready(core)) return unavailable("等待四只沪深300 ETF 的逐分钟数据与基线");
+  const last = Math.min(...core.map((row) => Math.max(...maps.get(row.symbol).keys())));
+  const end = Math.min(cutoff, last);
+  if (cutoff - end > ACTIVITY.maxLag) return unavailable("主力 ETF 分钟数据延迟，暂缓强度判断");
+  const scopes = [{ name: "沪深300 主力", rows: core }];
+  if (rows.length === 23 && ready(rows)) scopes.push({ name: "全池", rows });
+  function windowFor(scope, at, width) {
+    const start = at - width;
+    // Do not mix opening/closing auctions or span the lunch break.
+    if (start < 5 || (start < 120 && at > 120) || at >= 237) return null;
+    let amount = 0, expected = 0, weightedMove = 0, rising = 0;
+    for (const row of scope.rows) {
+      const records = maps.get(row.symbol);
+      const a = records.get(start), b = records.get(at);
+      if (!a || !b || !(a.price > 0) || !(b.price > 0)) return null;
+      const value = b.cumulative - a.cumulative;
+      const baseline = profileAt(row.profile, at, shape) - profileAt(row.profile, start, shape);
+      if (!(value >= 0) || !(baseline > 0)) return null;
+      // Do not turn a feed gap into a precise price/volume inference.
+      for (let t = start; t <= at; t++) if (!records.has(t)) return null;
+      amount += value;
+      expected += baseline;
+      weightedMove += value * (b.price / a.price - 1);
+      if (b.price > a.price) rising++;
+    }
+    const multiple = amount / expected;
+    const move = amount ? weightedMove / amount : 0;
+    const breadth = rising / scope.rows.length;
+    const minAmount = (scope.name === "全池" ? 1e8 : 5e7) * width / 5;
+    let grade = 0;
+    if (amount >= minAmount && move >= ACTIVITY.minMove && breadth >= 0.5) {
+      grade = ACTIVITY.thresholds.filter((threshold) => multiple >= threshold).length;
+      // Broad participation is needed for the two highest grades.
+      if (breadth < 0.75) grade = Math.min(grade, 2);
+    }
+    return { grade, label: ACTIVITY.labels[grade], scope: scope.name, width, start, end: at,
+      from: clockFor(start), clock: clockFor(at), amount, expected, multiple, move, rising, count: scope.rows.length };
+  }
+  const choose = (items) => items.filter(Boolean).sort((a, b) => b.grade - a.grade || b.end - a.end || a.width - b.width || b.multiple - a.multiple)[0] || null;
+  function atTime(at) {
+    return choose(scopes.flatMap((scope) => {
+      const short = windowFor(scope, at, 5);
+      const long = windowFor(scope, at, 15);
+      // A prior rally must not override fresh selling in the last five minutes.
+      if (long && (!short || short.move < 0)) long.grade = 0;
+      if (long) long.label = ACTIVITY.labels[long.grade];
+      return [short, long];
+    }));
+  }
+  const current = atTime(end);
+  if (!current) return unavailable("分钟区间不完整，等待连续成交数据");
+  const peaks = [];
+  for (let at = 10; at <= end; at++) {
+    const point = atTime(at);
+    if (point?.grade) peaks.push(point);
+  }
+  const peak = peaks.sort((a, b) => b.grade - a.grade || b.multiple - a.multiple || b.end - a.end || a.width - b.width)[0] || null;
+  return { available: true, reason: "", current, peak, lag: Math.max(0, minute - end) };
+}
+
+export function signalFor(summary, state, activity) {
   if (!summary.complete || !summary.coherent)
     return {
       title: "等待完整数据。",
@@ -646,50 +726,24 @@ export function signalFor(summary, state) {
       detail:
         "可用量能区间落后最新行情超过 10 个交易分钟，更新后恢复综合信号。",
     };
-  if (summary.flow === null)
+  if (!activity?.available)
     return {
-      title: "方向待确认。",
-      headline: "方向未明，继续观察。",
-      label: "方向待确认",
+      title: "强度待确认。",
+      headline: "分钟待齐，暂缓判断。",
+      label: "强度待确认",
       level: "neutral",
-      detail: "外内盘数据不足，成交额与量能倍数仍可查看。",
+      detail: activity?.reason || "等待逐分钟数据，全天量能仍可查看。",
     };
-  const skew = summary.amount ? summary.flow / summary.amount : 0;
-  const flow = `${summary.flow > 0 ? "+" : ""}${(summary.flow / 1e8).toFixed(2)}`;
-  const evidence = `同刻量能 ${summary.ratio.toFixed(2)}×，外内盘差估算 ${flow} 亿元。`;
-  if (summary.ratio >= 1.8 && skew >= 0.08)
-    return {
-      title: "放量。买盘偏强。",
-      headline: "疑似在上班。",
-      evidence,
-      label: "重点观察",
-      level: "strong",
-      detail: "量能 ≥ 1.8×，买卖差占比 ≥ 8%。",
-    };
-  if (summary.ratio >= 1.3 && skew > 0)
-    return {
-      title: "放量。留意买盘。",
-      headline: "疑似有动作。",
-      evidence,
-      label: "放量观察",
-      level: "watch",
-      detail: "量能 ≥ 1.3×，外内盘差偏正。",
-    };
-  if (summary.ratio >= 1.3)
-    return {
-      title: "放量。买盘待确认。",
-      headline: "护盘尚待确认。",
-      evidence,
-      label: "放量观察",
-      level: "watch",
-      detail: "量能 ≥ 1.3×，外内盘差未呈买盘优势。",
-    };
+  const { current, peak } = activity;
+  const headlines = [peak ? "有过动作，当前趋缓。" : "暂未见明显动作。", "疑似小幅试探。", "疑似温和上班。", "疑似积极上班。", "疑似明显加力。"];
+  const evidence = `${current.scope}近 ${current.width} 分钟 ${current.multiple.toFixed(2)}×，区间涨跌 ${(current.move * 100).toFixed(2)}%。`;
   return {
-    title: "量能平稳。",
-    headline: "暂未见上班迹象。",
+    title: current.label,
+    headline: headlines[current.grade],
     evidence,
-    label: "常态观察",
-    level: "calm",
-    detail: "成交额低于 1.3× 放量观察阈值。",
+    label: current.label,
+    level: ["calm", "light", "watch", "active", "strong"][current.grade],
+    grade: current.grade,
+    detail: "以近期放量、区间涨幅与上涨家数共同判断；仅为量价信号。",
   };
 }

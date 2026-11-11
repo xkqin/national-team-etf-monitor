@@ -112,6 +112,8 @@ svg { display: block; }
   background: var(--g-neutral); -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent; }
 .headline.level-strong { background-image: var(--g-strong); }
 .headline.level-watch { background-image: var(--g-watch); }
+.headline.level-light { background-image: var(--g-deep); }
+.headline.level-active { background-image: linear-gradient(90deg, #ff8a3d, #e3342f); }
 .headline.level-calm { background-image: linear-gradient(180deg, #0b1f3a 30%, #1d4f8f 100%); }
 .headline.flash { animation: rise .9s var(--ease); }
 @keyframes rise { from { opacity: 0; transform: translateY(14px); filter: blur(4px); } to { opacity: 1; transform: none; filter: none; } }
@@ -147,9 +149,23 @@ svg { display: block; }
 .tag { display: inline-flex; align-items: center; height: 28px; padding: 0 12px; border-radius: 980px; font-size: 13px; font-weight: 600; background: var(--fg); color: #fff; }
 .tag.level-strong { background: var(--up); }
 .tag.level-watch { background: var(--amber); }
+.tag.level-light { background: #6d4aff; }
+.tag.level-active { background: #ee6724; }
 .tag.level-calm { background: var(--today); }
 .tag.level-neutral { background: var(--fg-3); }
 .tag.subtle { background: var(--mist-2); color: var(--fg-2); font-weight: 500; }
+.activity { margin-top: 24px; max-width: 560px; }
+.activity-top { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 16px; font-size: 13px; color: var(--fg-2); }
+.activity-top strong { color: var(--fg); font-weight: 600; }
+.activity-meter, .activity-scale { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.activity-meter { margin-top: 10px; }
+.activity-meter i { height: 8px; border-radius: 8px; background: rgba(11,31,58,.09); transition: background .5s; }
+.activity-meter .on { background: #6d4aff; }
+.activity-meter.level-watch .on { background: var(--amber); }
+.activity-meter.level-active .on { background: #ee6724; }
+.activity-meter.level-strong .on { background: var(--up); }
+.activity-scale { margin-top: 6px; font-size: 11px; color: var(--fg-3); text-align: center; }
+.activity-peak { margin: 12px 0 0; color: var(--fg-2); font-size: 13px; line-height: 1.5; }
 
 .gauge-card { margin: 0 auto; width: 100%; max-width: 360px; padding: 22px 20px 20px; border-radius: var(--radius); background: rgba(255, 255, 255, .78); box-shadow: var(--shadow-lg); border: 1px solid var(--hair-2); text-align: center; -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
 .gauge { width: 100%; max-width: 260px; margin: 0 auto; overflow: visible; }

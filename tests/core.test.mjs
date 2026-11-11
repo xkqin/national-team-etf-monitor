@@ -10,6 +10,7 @@ import {
   marketState,
   aggregate,
   signalFor,
+  activityFor,
   minuteToFiveMinute,
   tradingMinute,
   clockFor,
@@ -69,7 +70,7 @@ test("delayed volume history suppresses current composite signals", () => {
   assert.equal(result.headline, "量能延迟，暂缓判断。");
 });
 
-test("headline and evidence follow the measured volume and direction", () => {
+test("recent buying drives the headline even with a low all-day ratio and negative cumulative flow", () => {
   const base = {
     complete: true,
     coherent: true,
@@ -77,20 +78,12 @@ test("headline and evidence follow the measured volume and direction", () => {
     comparisonLagMinutes: 0,
   };
   const market = { session: true, fresh: true };
-  const cases = [
-    { ratio: 1.16, flow: -5.78e8, headline: "暂未见上班迹象。" },
-    { ratio: 1.5, flow: 5e8, headline: "疑似有动作。" },
-    { ratio: 1.8, flow: 8e8, headline: "疑似在上班。" },
-    { ratio: 2, flow: -5e8, headline: "护盘尚待确认。" },
-    { ratio: 2, flow: 0, headline: "护盘尚待确认。" },
-  ];
-  for (const item of cases) {
-    const signal = signalFor({ ...base, ...item }, market);
-    assert.equal(signal.headline, item.headline);
-    assert.ok(signal.evidence.includes(`${item.ratio.toFixed(2)}×`));
-  }
-  const calm = signalFor({ ...base, ratio: 1.16, flow: -5.78e8 }, market);
-  assert.equal(calm.evidence, "同刻量能 1.16×，外内盘差估算 -5.78 亿元。");
+  const data = activityFixture(1.75);
+  const activity = activityFor(data.rows, data.map, 90);
+  const signal = signalFor({ ...base, ratio: 0.82, flow: -5e8 }, market, activity);
+  assert.equal(signal.headline, "疑似温和上班。");
+  assert.equal(signal.grade, 2);
+  assert.match(signal.evidence, /1.75×/);
 });
 
 test("incomplete, stale, and unready data defer the headline conclusion", () => {
@@ -118,8 +111,100 @@ test("incomplete, stale, and unready data defer the headline conclusion", () => 
   );
   assert.equal(
     signalFor({ ...base, flow: null }, { session: true, fresh: true }).headline,
-    "方向未明，继续观察。",
+    "分钟待齐，暂缓判断。",
   );
+});
+
+function activityFixture(multiple = 1, direction = 1, length = 90) {
+  const profile = { points: Array.from({ length: 49 }, (_, i) => i * 5e7), days: 20 };
+  const rows = Array.from({ length: 4 }, (_, i) => ({ symbol: `core${i}`, group: "沪深300", profile }));
+  const map = Object.fromEntries(rows.map((row) => {
+    let cumulative = 0;
+    const records = Array.from({ length: length + 1 }, (_, minute) => {
+      const ratio = typeof multiple === "function" ? multiple(minute) : multiple;
+      const amount = ratio * 1e7;
+      cumulative += amount;
+      return { minute, clock: clockFor(minute), amount, cumulative, price: 4 * (1 + direction * minute * 0.0001) };
+    });
+    return [row.symbol, records];
+  }));
+  return { rows, map };
+}
+
+test("activity distinguishes quiet, light, moderate, active and strong buying", () => {
+  for (const [ratio, grade] of [[1.1, 0], [1.21, 1], [1.51, 2], [2.01, 3], [3.01, 4]]) {
+    const { rows, map } = activityFixture(ratio);
+    const activity = activityFor(rows, map, 90);
+    assert.equal(activity.available, true);
+    assert.equal(activity.current.grade, grade);
+    assert.equal(activity.current.end, 89, "unfinished minute must be excluded");
+  }
+});
+
+test("selling-only turnover spikes never become buying activity", () => {
+  const { rows, map } = activityFixture(5, -1);
+  const result = activityFor(rows, map, 90);
+  assert.equal(result.current.grade, 0);
+  assert.equal(result.peak, null);
+});
+
+test("past activity remains visible as today's peak but decays out of current strength", () => {
+  const { rows, map } = activityFixture(t => t > 30 && t <= 35 ? 3.5 : 1);
+  const result = activityFor(rows, map, 90);
+  assert.equal(result.current.grade, 0);
+  assert.equal(result.peak.grade, 4);
+  assert.equal(result.peak.clock, "10:05");
+  const signal = signalFor({ complete: true, coherent: true, ratio: 0.8 }, { fresh: true, session: true }, result);
+  assert.equal(signal.headline, "有过动作，当前趋缓。");
+});
+
+test("missing, delayed or gapped core minutes are unknown instead of quiet", () => {
+  const { rows, map } = activityFixture(3);
+  assert.equal(activityFor(rows, {}, 90).available, false, "snapshot has no true minutes");
+  assert.equal(activityFor(rows.slice(1), map, 90).available, false);
+  const delayed = Object.fromEntries(Object.entries(map).map(([symbol, records]) => [symbol, records.slice(0, 80)]));
+  assert.equal(activityFor(rows, delayed, 90).available, false);
+  const gap = { ...map, core0: map.core0.filter(r => r.minute !== 86) };
+  assert.equal(activityFor(rows, gap, 90).available, false);
+});
+
+test("strong grades require broad participation and sufficient absolute turnover", () => {
+  const { rows, map } = activityFixture(4);
+  for (const symbol of ["core2", "core3"]) map[symbol] = map[symbol].map(r => ({ ...r, price: 4 }));
+  assert.equal(activityFor(rows, map, 90).current.grade, 2);
+  const thin = activityFixture(4);
+  for (const records of Object.values(thin.map)) for (const r of records) r.cumulative /= 1000;
+  for (const row of thin.rows) row.profile = { ...row.profile, points: row.profile.points.map(v => v / 1000) };
+  assert.equal(activityFor(thin.rows, thin.map, 90).current.grade, 0);
+});
+
+test("fresh selling cancels an older fifteen-minute buying window", () => {
+  const { rows, map } = activityFixture(t => t > 74 && t <= 84 ? 5 : 1);
+  for (const records of Object.values(map)) for (const r of records) {
+    if (r.minute > 84) r.price = 4 * (1 + 84 * 0.0001) - (r.minute - 84) * 0.001;
+  }
+  const result = activityFor(rows, map, 90);
+  assert.equal(result.current.grade, 0);
+  assert.ok(result.peak.grade > 0);
+});
+
+test("opening and cross-lunch windows cannot create current activity", () => {
+  const { rows, map } = activityFixture(4, 1, 130);
+  assert.equal(activityFor(rows, map, 9).available, false);
+  // 13:02 has neither a 5- nor 15-minute window wholly in the afternoon session.
+  assert.equal(activityFor(rows, map, 122).available, false);
+});
+
+test("Nov 11 observed core rally is moderate activity and later selling is quiet", async () => {
+  const fixture = JSON.parse(await readFile(new URL("./fixtures/activity-20261111.json", import.meta.url), "utf8"));
+  const replay = activityFor(fixture.rows, fixture.minuteMap, 166);
+  assert.equal(replay.current.grade, 2);
+  assert.equal(replay.current.clock, "13:45");
+  assert.ok(Math.abs(replay.current.multiple - 1.75303) < 0.0001);
+  assert.equal(replay.current.rising, 4);
+  const later = activityFor(fixture.rows, fixture.minuteMap, 224);
+  assert.equal(later.current.grade, 0);
+  assert.equal(later.peak.clock, "13:45");
 });
 
 const fund = {

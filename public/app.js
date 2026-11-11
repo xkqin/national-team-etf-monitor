@@ -3,6 +3,8 @@ import {
   parseQuotes,
   marketState,
   signalFor,
+  activityFor,
+  ACTIVITY,
   liveSummary,
   parseMinuteLines,
   parseTrendLines,
@@ -14,7 +16,7 @@ import {
   tradingMinute,
   LIVE_MIN_MINUTE,
   minuteFeedMode,
-} from "./core.js?v=20261106g";
+} from "./core.js?v=20261111a";
 
 // Minute lines change once a minute; the chart's live tip moves every second from the quotes.
 const MINUTE_MS = 60_000;
@@ -41,7 +43,7 @@ const GROUP_INDEX = {
 const CORE_GROUP = "沪深300";
 const CHART_INDEX = "sh000300";
 // Evidence thresholds (site rules, shown next to every item).
-const EVIDENCE = { volume: 1.3, core: 1.5, skew: 0.03, premium: 0.1 };
+const EVIDENCE = { skew: 0.03, premium: 0.1 };
 
 const $ = (id) => document.getElementById(id);
 const escape = (text) =>
@@ -403,7 +405,6 @@ function buildView() {
   const shape = state.shape;
   const summary = liveSummary(state.pool, state.quotes, state.history, shape);
   const market = marketState(summary.time);
-  const signal = signalFor(summary, market);
   const profiles = Object.fromEntries(summary.rows.map((row) => [row.symbol, row.profile]));
   const date = summary.date;
   const minuteMap = {};
@@ -481,22 +482,25 @@ function buildView() {
   });
 
   const core = groups.find((item) => item.group === CORE_GROUP);
+  const activity = activityFor(summary.rows, minuteMap, summary.minute, shape);
+  const signal = signalFor(summary, market, activity);
+  const recent = activity.available ? activity.current : null;
   const skew = summary.flow !== null && summary.amount ? summary.flow / summary.amount : null;
   const buyPulses = series.filter((point) => point.pulse && point.move > 0);
   const defensePulses = buyPulses.filter((point) => point.index !== null && point.index < 0);
   const evidence = [
     {
-      label: "全池放量",
-      hit: finite(summary.ratio) ? summary.ratio >= EVIDENCE.volume : null,
-      detail: finite(summary.ratio) ? `${times(summary.ratio)} · 需 ≥ ${EVIDENCE.volume}×` : "开盘 5 分钟后计算",
+      label: "近期放量",
+      hit: recent ? recent.multiple >= ACTIVITY.thresholds[0] : null,
+      detail: recent ? `${recent.scope} · ${recent.width} 分钟 ${times(recent.multiple)}` : activity.reason,
     },
     {
-      label: "沪深300 主力放量",
-      hit: finite(core?.ratio) ? core.ratio >= EVIDENCE.core : null,
-      detail: finite(core?.ratio) ? `4 只合计 ${times(core.ratio)} · 需 ≥ ${EVIDENCE.core}×` : "等待基线",
+      label: "价格同步上行",
+      hit: recent ? recent.move >= ACTIVITY.minMove && recent.rising / recent.count >= 0.5 : null,
+      detail: recent ? `${recent.rising} / ${recent.count} 只上涨 · 区间 ${pct(recent.move * 100)}` : "等待连续分钟数据",
     },
     {
-      label: "主动买盘占优",
+      label: "全天主动买盘",
       hit: skew === null ? null : skew >= EVIDENCE.skew,
       detail: skew === null ? "外内盘数据不足" : `净买入占成交 ${pct(skew * 100, 1)} · 需 ≥ +${EVIDENCE.skew * 100}%`,
     },
@@ -506,7 +510,7 @@ function buildView() {
       detail: finite(summary.premium) ? `加权 ${pct(summary.premium)} · 需 ≥ +${EVIDENCE.premium.toFixed(2)}%` : "等待 IOPV",
     },
     {
-      label: "跌势中放量拉升",
+      label: "今日跌势中拉升",
       hit: !coarse && series.length ? defensePulses.length > 0 : null,
       detail: coarse ? "等待逐分钟数据，五分钟快照暂不判定脉冲" : series.length
         ? defensePulses.length
@@ -516,7 +520,7 @@ function buildView() {
     },
   ];
   const minuteMode = minuteFeedMode({ hasRecords: series.length > 0, coarse, attempted: state.lastMinute > 0, loading: state.minuteLoading });
-  return { summary, market, signal, profiles, shape, series, coarse, minuteMode, used, indexMinutes, hs300, events, groups, core, skew, buyPulses, defensePulses, evidence };
+  return { summary, market, signal, activity, profiles, shape, series, coarse, minuteMode, used, indexMinutes, hs300, events, groups, core, skew, buyPulses, defensePulses, evidence };
 }
 
 /* ---------------- Render ---------------- */
@@ -527,7 +531,7 @@ function render() {
   state.view = view;
   renderHero(view);
   renderTicker();
-  renderGauge(view.summary.ratio, view.signal.level);
+  renderGauge(view.summary.ratio, levelOf(view.summary.ratio));
   renderKpis(view);
   renderAlerts(view);
   renderChart();
@@ -540,38 +544,28 @@ function render() {
 }
 
 function heroSentence(view) {
-  const { summary, signal, skew } = view;
-  if (!finite(summary.ratio)) return { lede: signal.detail, note: "" };
-  const ratio = summary.ratio.toFixed(2);
-  const flow = signedYi(summary.flow, 2);
-  const volume =
-    summary.ratio >= 1.8
-      ? `成交额达到历史同时点均值的 <b>${ratio} 倍</b>`
-      : summary.ratio >= 1.3
-        ? `成交额是历史同时点均值的 <b>${ratio} 倍</b>`
-        : `成交额只有历史同时点均值的 <b>${ratio} 倍</b>`;
-  const direction =
-    summary.flow === null
-      ? "主动买卖方向暂缺"
-      : `主动净买入 <b>${flow} 亿元</b>${skew !== null ? `（占成交 ${pct(skew * 100, 1)}）` : ""}`;
-  const mood =
-    signal.level === "strong"
-      ? "放量且买盘占优。"
-      : signal.level === "watch"
-        ? summary.flow > 0
-          ? "放量，买盘偏强。"
-          : "放量，但买盘没占上风。"
-        : summary.flow > 0
-          ? "量能平稳，略有买盘。"
-          : "量价都平静。";
-  const pulses = view.buyPulses.length
-    ? `盘中 ${view.buyPulses.length} 次放量拉升${view.defensePulses.length ? `，其中 ${view.defensePulses.length} 次发生在指数下跌时` : ""}。`
-    : "";
-  const note =
-    summary.progress !== null && summary.clock
-      ? `${summary.clock} 历史平均已走完全天 ${(summary.progress * 100).toFixed(1)}%，分母已按同比例缩放；今日已达全天日均 ${times(summary.dayRatio)}。`
-      : "";
-  return { lede: `${volume}，${direction}，${mood}${pulses}`, note };
+  const { summary, signal, activity } = view;
+  if (!finite(signal.grade)) return { lede: signal.detail, note: "" };
+  const r = activity.current;
+  return {
+    lede: `${r.scope}近 ${r.width} 分钟成交 <b>${times(r.multiple)}</b>，区间 <b>${pct(r.move * 100)}</b>，${r.rising} / ${r.count} 只上涨。`,
+    note: `${r.from}–${r.clock} 已完成区间 · 全池全天量能 ${times(summary.ratio)} · 强度来自量价信号，无法识别交易账户。`,
+  };
+}
+
+function renderActivity(view) {
+  const { activity, signal, summary } = view;
+  const ready = activity.available && finite(signal.grade);
+  const grade = ready ? signal.grade : null;
+  $("activity-label").textContent = ready ? `${ACTIVITY.labels[grade]} · ${grade} / 4` : "等待判断";
+  $("activity-meter").className = `activity-meter level-${signal.level}`;
+  $("activity-meter").setAttribute("aria-label", ready ? `量价活动强度 ${grade} 级，共四级` : signal.detail);
+  $("activity-meter").innerHTML = ACTIVITY.thresholds.map((_, index) => `<i class="${grade !== null && index < grade ? "on" : ""}"></i>`).join("");
+  const peak = ready ? activity.peak : null;
+  const day = summary.date === chinaNow().slice(0, 10) ? "今日" : "当日";
+  $("activity-peak").textContent = peak
+    ? `${day}最强 · ${peak.label} · ${peak.from}–${peak.clock} · ${peak.scope} ${times(peak.multiple)}`
+    : ready ? `${day}尚未记录到达到阈值的买入量价信号` : signal.detail;
 }
 
 function renderHero(view) {
@@ -598,6 +592,7 @@ function renderHero(view) {
   const sentence = heroSentence(view);
   $("conclusion-summary").innerHTML = sentence.lede;
   $("conclusion-note").textContent = sentence.note;
+  renderActivity(view);
   $("overview").dataset.level = signal.level;
   $("signal-badge").textContent = signal.label;
   $("signal-badge").className = `tag level-${signal.level}`;
