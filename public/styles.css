@@ -108,7 +108,7 @@ svg { display: block; }
 .stamp { margin: 0; font-size: 13px; color: var(--fg-3); }
 .hero-grid { display: grid; gap: 28px; align-items: center; }
 @media (min-width: 900px) { .hero-grid { grid-template-columns: minmax(0, 1fr) 300px; gap: 48px; } }
-.headline { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: clamp(44px, 8.4vw, 92px); line-height: 1.04; letter-spacing: -0.035em; padding-bottom: .06em;
+.headline { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: clamp(44px, 8.4vw, 92px); line-height: 1.04; letter-spacing: -0.035em; padding-bottom: .06em; text-wrap: balance;
   background: var(--g-neutral); -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent; }
 .headline.level-strong { background-image: var(--g-strong); }
 .headline.level-watch { background-image: var(--g-watch); }
