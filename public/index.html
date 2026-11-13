@@ -12,12 +12,12 @@
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
     <link rel="preconnect" href="https://qt.gtimg.cn" crossorigin />
     <link rel="preconnect" href="https://push2his.eastmoney.com" crossorigin />
-    <link rel="modulepreload" href="./core.js?v=20261111a" />
+    <link rel="modulepreload" href="./core.js?v=20261113a" />
     <link rel="preload" href="./pool.json" as="fetch" crossorigin />
     <!-- Asset URLs carry a version so a new deploy never mixes with cached old files. -->
     <link rel="stylesheet" href="./fonts.css?v=20261106f" />
-    <link rel="stylesheet" href="./styles.css?v=20261111b" />
-    <script type="module" src="./app.js?v=20261111a"></script>
+    <link rel="stylesheet" href="./styles.css?v=20261113a" />
+    <script type="module" src="./app.js?v=20261113a"></script>
   </head>
   <body>
     <a class="skip" href="#main">跳到正文</a>
@@ -60,22 +60,32 @@
           <div class="hero-top">
             <p class="eyebrow">
               <span class="live-dot" id="eyebrow-dot"></span>
-              <span id="conclusion-context">今日结论 · 实时跟踪</span>
+              <span id="conclusion-context">当前信号 · 15分钟主判断</span>
             </p>
             <p class="stamp" id="update-time">正在连接行情…</p>
           </div>
           <div class="hero-grid">
             <div class="hero-copy">
-              <p class="question" id="question">汪汪队今天进场了吗？</p>
+              <p class="question" id="question">汪汪队观察池，现在有动作吗？</p>
               <h1 id="conclusion-headline" class="headline level-neutral">正在读取数据</h1>
               <p class="hero-lede" id="conclusion-summary">正在同步实时行情与历史同时点基线。</p>
               <p class="hero-note" id="conclusion-note"></p>
               <div class="activity">
-                <div class="activity-top"><span>量价活动强度</span><strong id="activity-label">等待判断</strong></div>
+                <div class="activity-top"><span>当前15分钟量价强度</span><strong id="activity-label">等待判断</strong></div>
                 <div class="activity-meter" id="activity-meter" role="img" aria-label="等待强度数据"><i></i><i></i><i></i><i></i></div>
                 <div class="activity-scale" aria-hidden="true"><span>轻度</span><span>温和</span><span>积极</span><span>强力</span></div>
-                <p id="activity-peak" class="activity-peak">正在检查今日动作…</p>
               </div>
+              <div id="activity-windows" class="activity-windows" aria-label="三个观察窗口"></div>
+              <section class="activity-day" aria-labelledby="activity-day-title">
+                <h2 id="activity-day-title">今日已记录信号</h2>
+                <p id="activity-peak" class="activity-peak">正在检查15分钟信号…</p>
+                <p id="activity-short-peak" class="activity-peak">正在检查5分钟异动…</p>
+                <details class="activity-history">
+                  <summary id="activity-history-title">查看15分钟信号记录</summary>
+                  <ol id="activity-history-list"></ol>
+                </details>
+                <p id="activity-history-note" class="activity-history-note"></p>
+              </section>
               <div class="hero-tags">
                 <span class="tag" id="signal-badge">正在连接</span>
                 <span class="tag subtle" id="coverage">23 只宽基 ETF</span>
@@ -92,10 +102,10 @@
           </div>
 
           <div class="evidence-head">
-            <span>进场证据</span>
+            <span>量价参考证据</span>
             <b id="evidence-score">— / 5</b>
           </div>
-          <ul class="evidence" id="evidence" aria-label="进场证据清单"></ul>
+          <ul class="evidence" id="evidence" aria-label="量价参考证据清单"></ul>
 
           <div class="kpis">
             <article class="kpi">
@@ -248,8 +258,8 @@
             </article>
             <article class="card method-card">
               <span class="method-no">02</span>
-              <h3>上班，分程度</h3>
-              <p>看最近 5 / 15 分钟，沪深300 四只主力或全池的成交较历史同段达到 1.2 / 1.5 / 2 / 3 倍，依次为轻度、温和、积极、强力；同时要求价格上行与多只同步上涨。</p>
+              <h3>15分钟判断，长短配合</h3>
+              <p>15分钟量价决定当前主信号；5分钟提醒短时异动，30分钟参考持续性。各自与历史相同区间比较，今日已经出现的信号单独保留。</p>
             </article>
             <article class="card method-card">
               <span class="method-no">03</span>
@@ -267,9 +277,9 @@
               <li>同时点进度 = 同时刻历史平均累计成交额 ÷ 历史平均全天成交额；「已达全天日均」= 今日成交额 ÷ 历史平均全天成交额。</li>
               <li>池内涨跌与溢价率按当日成交额加权。IOPV 为交易所每 15 秒发布的参考净值，现金替代与成分股停牌会使其偏离。</li>
               <li>放量脉冲：全池 1 分钟成交额 ≥ 同时段均值 3×（5× 为强脉冲）且 ≥ 1 亿元；单只 ETF 为 ≥ 4× 且 ≥ 0.5 亿元。「同时段均值」按该分钟在历史上的真实成交占比计算，因此开盘、午后第一分钟的天然放量不会误报。09:30 开盘集合竞价与 14:57 之后的收盘集合竞价不计。阈值为本站规则。</li>
-              <li>活动强度：取沪深300 四只主力与完整 23 只观察池最近已完成的 5 / 15 交易分钟区间，成交额除以前 20 个完整交易日同段均值。≥ 1.2 / 1.5 / 2 / 3× 对应 1–4 级；区间成交额须达到主力每 5 分钟 0.5 亿、全池每 5 分钟 1 亿，15 分钟门槛乘三；成交额加权区间涨幅 ≥ 0.02%，至少一半 ETF 上涨，3–4 级至少四分之三上涨。15 分钟信号要求最近 5 分钟价格未下行。按级别、结束时间、较短区间排序取最强有效信号。阈值为本站启发式规则，未经过机构身份标注验证，不代表概率。</li>
-              <li>当前强度与今日最强分别展示。全天累计量能仅作背景，不再限制近期信号。开盘前 5 分钟、跨午休区间与收盘集合竞价不参与强度判断；开盘至少积累 10 分钟。任一主力缺失、分钟区间有缺口或落后超过 3 个交易分钟时，强度显示待判断，五分钟云端快照不用于强度推断。收盘后显示最后连续竞价区间的强度与时间。</li>
-              <li>五项辅助证据：近期放量、价格同步上行、全天外内盘差占成交 ≥ +3%、加权溢价 ≥ +0.10%、今日指数低于昨收时出现放量拉升。它们展示不同时间范围的背景，命中数不是机构概率，也不直接相加生成强度。主动净买入为成交额 ×（外盘量 − 内盘量）÷（外盘量 + 内盘量），方向受套利、对冲与撮合口径影响。</li>
+              <li>活动强度：分别计算沪深300 四只主力与完整 23 只观察池最近已完成的 5、15、30 交易分钟区间，成交额除以前最多 20 个完整交易日同段均值（至少 5 日）。每个窗口内取两组较强信号；15分钟固定决定主结论，5分钟预警与30分钟参考不替代或否决主结论。≥ 1.2 / 1.5 / 2 / 3× 对应 1–4 级；成交额门槛为主力每5分钟0.5亿、全池每5分钟1亿，15分钟乘三、30分钟乘六；成交额加权涨幅 ≥ 0.02%，至少一半 ETF 上涨，3–4级至少四分之三上涨。阈值是待检验的观察规则，不代表机构概率或最优参数。</li>
+              <li>当前15分钟强度与今日记录分开展示；5分钟异动最强单独标为预警。记录由已获取的当日完整分钟区间重建，连续出现的重叠15分钟信号合并为一段，展示观察时间与最强成交区间；当前趋缓或最新窗口缺口不会抹去可核验的早前信号。未覆盖区间不推断为没有信号。全天累计量能仅作背景。开盘首5分钟、跨午休区间和收盘集合竞价不参与判断；15分钟需积累完整区间，不足时只显示可用的5分钟提醒。主力分钟缺失或落后超过3个交易分钟时，受影响窗口待判断；五分钟云端快照不作逐分钟强度推断。收盘后显示最后连续竞价区间的强度与时间。</li>
+              <li>五项辅助证据：15分钟放量、15分钟价格同步上行、全天外内盘差占成交 ≥ +3%、加权溢价 ≥ +0.10%、今日指数低于昨收时出现放量拉升。它们展示不同时间范围的背景，命中数不是机构概率，也不直接相加生成强度。主动净买入为成交额 ×（外盘量 − 内盘量）÷（外盘量 + 内盘量），方向受套利、对冲与撮合口径影响。</li>
               <li>历史 5 分钟线与日线由 GitHub Actions 从东方财富采集并部署为同源快照，收盘后校对；快照只作为分母与断线兜底，盘中数字以浏览器直连的实时行情为准。</li>
               <li>所有指标均为公开行情的量价推断。交易账户身份、真实申购赎回与机构持仓以基金定期报告与独立披露为准。本页不构成投资建议。</li>
             </ul>

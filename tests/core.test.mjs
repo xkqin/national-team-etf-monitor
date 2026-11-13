@@ -81,7 +81,7 @@ test("recent buying drives the headline even with a low all-day ratio and negati
   const data = activityFixture(1.75);
   const activity = activityFor(data.rows, data.map, 90);
   const signal = signalFor({ ...base, ratio: 0.82, flow: -5e8 }, market, activity);
-  assert.equal(signal.headline, "疑似温和上班。");
+  assert.equal(signal.headline, "当前温和放量上行。");
   assert.equal(signal.grade, 2);
   assert.match(signal.evidence, /1.75×/);
 });
@@ -137,6 +137,7 @@ test("activity distinguishes quiet, light, moderate, active and strong buying", 
     const activity = activityFor(rows, map, 90);
     assert.equal(activity.available, true);
     assert.equal(activity.current.grade, grade);
+    assert.equal(activity.current.width, 15);
     assert.equal(activity.current.end, 89, "unfinished minute must be excluded");
   }
 });
@@ -152,10 +153,13 @@ test("past activity remains visible as today's peak but decays out of current st
   const { rows, map } = activityFixture(t => t > 30 && t <= 35 ? 3.5 : 1);
   const result = activityFor(rows, map, 90);
   assert.equal(result.current.grade, 0);
-  assert.equal(result.peak.grade, 4);
-  assert.equal(result.peak.clock, "10:05");
+  assert.equal(result.peak.grade, 2);
+  assert.equal(result.peak.width, 15);
+  assert.equal(result.shortPeak.grade, 4);
+  assert.equal(result.shortPeak.clock, "10:05");
+  assert.equal(result.events.length, 1, "overlapping observations are one episode");
   const signal = signalFor({ complete: true, coherent: true, ratio: 0.8 }, { fresh: true, session: true }, result);
-  assert.equal(signal.headline, "有过动作，当前趋缓。");
+  assert.equal(signal.headline, "当前未见明显信号。");
 });
 
 test("missing, delayed or gapped core minutes are unknown instead of quiet", () => {
@@ -178,7 +182,7 @@ test("strong grades require broad participation and sufficient absolute turnover
   assert.equal(activityFor(thin.rows, thin.map, 90).current.grade, 0);
 });
 
-test("fresh selling cancels an older fifteen-minute buying window", () => {
+test("a falling fifteen-minute interval cannot become a buying signal", () => {
   const { rows, map } = activityFixture(t => t > 74 && t <= 84 ? 5 : 1);
   for (const records of Object.values(map)) for (const r of records) {
     if (r.minute > 84) r.price = 4 * (1 + 84 * 0.0001) - (r.minute - 84) * 0.001;
@@ -195,16 +199,95 @@ test("opening and cross-lunch windows cannot create current activity", () => {
   assert.equal(activityFor(rows, map, 122).available, false);
 });
 
-test("Nov 11 observed core rally is moderate activity and later selling is quiet", async () => {
+test("Nov 11 five-minute rally remains an alert, not an invented fifteen-minute reading", async () => {
   const fixture = JSON.parse(await readFile(new URL("./fixtures/activity-20261111.json", import.meta.url), "utf8"));
   const replay = activityFor(fixture.rows, fixture.minuteMap, 166);
-  assert.equal(replay.current.grade, 2);
-  assert.equal(replay.current.clock, "13:45");
-  assert.ok(Math.abs(replay.current.multiple - 1.75303) < 0.0001);
-  assert.equal(replay.current.rising, 4);
+  assert.equal(replay.available, false, "the preserved fragment does not cover fifteen minutes");
+  assert.equal(replay.windows[5].grade, 2);
+  assert.equal(replay.windows[5].clock, "13:45");
+  assert.ok(Math.abs(replay.windows[5].multiple - 1.75303) < 0.0001);
+  assert.equal(replay.windows[5].rising, 4);
   const later = activityFor(fixture.rows, fixture.minuteMap, 224);
   assert.equal(later.current.grade, 0);
-  assert.equal(later.peak.clock, "13:45");
+  assert.equal(later.shortPeak.clock, "13:45");
+});
+
+test("a brief five-minute burst does not replace a quiet fifteen-minute main signal", () => {
+  const { rows, map } = activityFixture(t => t > 84 ? 3.1 : 0.1);
+  const activity = activityFor(rows, map, 90);
+  assert.equal(activity.current.width, 15);
+  assert.equal(activity.current.grade, 0);
+  assert.equal(activity.windows[5].grade, 4);
+  assert.equal(activity.windows[30].grade, 0);
+  assert.equal(activity.peak, null);
+  assert.equal(activity.shortPeak.grade, 4);
+});
+
+test("five-minute cooling and quiet thirty-minute context do not veto fifteen-minute strength", () => {
+  const { rows, map } = activityFixture(t => t > 74 && t <= 84 ? 3.1 : 0.1);
+  for (const records of Object.values(map)) for (const r of records) {
+    if (r.minute > 84) r.price = 4 * (1 + 84 * 0.0001) - (r.minute - 84) * 0.0001;
+  }
+  const activity = activityFor(rows, map, 90);
+  assert.equal(activity.current.grade, 3);
+  assert.equal(activity.windows[5].grade, 0);
+  assert.ok(activity.windows[5].move < 0);
+  assert.equal(activity.windows[30].grade, 0);
+});
+
+test("five-minute alert is available while the main window is still accumulating", () => {
+  const { rows, map } = activityFixture(3.1);
+  const activity = activityFor(rows, map, 16);
+  assert.equal(activity.available, false);
+  assert.equal(activity.current, null);
+  assert.equal(activity.windows[5].grade, 4);
+  assert.equal(activity.windows[15], null);
+  assert.equal(activity.windows[30], null);
+});
+
+test("latest fifteen-minute gaps preserve earlier day records without falling back to five", () => {
+  const { rows, map } = activityFixture(t => t > 30 && t <= 45 ? 3.5 : 1);
+  map.core0 = map.core0.filter(r => r.minute !== 78);
+  const activity = activityFor(rows, map, 90);
+  assert.equal(activity.available, false);
+  assert.equal(activity.windows[5].grade, 0);
+  assert.equal(activity.current, null);
+  assert.equal(activity.peak.grade, 4);
+  assert.equal(activity.historyComplete, false);
+  assert.equal(activity.events.length, 1);
+});
+
+test("delayed current readings do not erase dated earlier signals", () => {
+  const { rows, map } = activityFixture(2);
+  const delayed = Object.fromEntries(Object.entries(map).map(([symbol, records]) => [symbol, records.slice(0, 80)]));
+  const activity = activityFor(rows, delayed, 90);
+  assert.equal(activity.available, false);
+  assert.deepEqual(activity.windows, { 5: null, 15: null, 30: null });
+  assert.ok(activity.peak.grade > 0);
+  assert.equal(activity.historyComplete, false);
+});
+
+test("afternoon main interval waits for fifteen minutes and starts at 13:00", () => {
+  const { rows, map } = activityFixture(2, 1, 170);
+  const early = activityFor(rows, map, 131);
+  assert.equal(early.available, false);
+  assert.equal(early.windows[5].width, 5);
+  assert.ok(early.peak, "morning history remains available during afternoon accumulation");
+  const ready = activityFor(rows, map, 136);
+  assert.equal(ready.current.from, "13:00");
+  assert.equal(ready.current.clock, "13:15");
+  assert.equal(ready.windows[30], null);
+});
+
+test("each width compares the exact corresponding historical interval", () => {
+  const { rows, map } = activityFixture(t => t > 74 ? 2 : 1);
+  const activity = activityFor(rows, map, 90);
+  for (const width of [5, 15, 30]) {
+    const point = activity.windows[width];
+    const expected = rows.reduce((n, row) => n + profileAt(row.profile, point.end) - profileAt(row.profile, point.start), 0);
+    assert.equal(point.expected, expected);
+    assert.equal(point.end - point.start, width);
+  }
 });
 
 const fund = {

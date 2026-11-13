@@ -16,7 +16,7 @@ import {
   tradingMinute,
   LIVE_MIN_MINUTE,
   minuteFeedMode,
-} from "./core.js?v=20261111a";
+} from "./core.js?v=20261113a";
 
 // Minute lines change once a minute; the chart's live tip moves every second from the quotes.
 const MINUTE_MS = 60_000;
@@ -490,12 +490,12 @@ function buildView() {
   const defensePulses = buyPulses.filter((point) => point.index !== null && point.index < 0);
   const evidence = [
     {
-      label: "近期放量",
+      label: "15分钟放量",
       hit: recent ? recent.multiple >= ACTIVITY.thresholds[0] : null,
       detail: recent ? `${recent.scope} · ${recent.width} 分钟 ${times(recent.multiple)}` : activity.reason,
     },
     {
-      label: "价格同步上行",
+      label: "15分钟同步上行",
       hit: recent ? recent.move >= ACTIVITY.minMove && recent.rising / recent.count >= 0.5 : null,
       detail: recent ? `${recent.rising} / ${recent.count} 只上涨 · 区间 ${pct(recent.move * 100)}` : "等待连续分钟数据",
     },
@@ -548,24 +548,49 @@ function heroSentence(view) {
   if (!finite(signal.grade)) return { lede: signal.detail, note: "" };
   const r = activity.current;
   return {
-    lede: `${r.scope}近 ${r.width} 分钟成交 <b>${times(r.multiple)}</b>，区间 <b>${pct(r.move * 100)}</b>，${r.rising} / ${r.count} 只上涨。`,
+    lede: `${r.scope}近15分钟成交 <b>${times(r.multiple)}</b>，区间 <b>${pct(r.move * 100)}</b>，${r.rising} / ${r.count} 只上涨。`,
     note: `${r.from}–${r.clock} 已完成区间 · 全池全天量能 ${times(summary.ratio)} · 强度来自量价信号，无法识别交易账户。`,
   };
 }
 
 function renderActivity(view) {
-  const { activity, signal, summary } = view;
+  const { activity, signal, summary, market } = view;
   const ready = activity.available && finite(signal.grade);
   const grade = ready ? signal.grade : null;
   $("activity-label").textContent = ready ? `${ACTIVITY.labels[grade]} · ${grade} / 4` : "等待判断";
   $("activity-meter").className = `activity-meter level-${signal.level}`;
-  $("activity-meter").setAttribute("aria-label", ready ? `量价活动强度 ${grade} 级，共四级` : signal.detail);
+  $("activity-meter").setAttribute("aria-label", ready ? `当前15分钟量价活动强度 ${grade} 级，共四级` : signal.detail);
   $("activity-meter").innerHTML = ACTIVITY.thresholds.map((_, index) => `<i class="${grade !== null && index < grade ? "on" : ""}"></i>`).join("");
-  const peak = ready ? activity.peak : null;
+  const usable = summary.complete && summary.coherent && (!market.session || market.fresh)
+    && summary.ratio !== null && !(summary.comparisonLagMinutes > 10);
+  const roles = [[15, "主判断"], [5, "异动提醒"], [30, "持续性参考"]];
+  $("activity-windows").innerHTML = roles.map(([width, role]) => {
+    const r = usable ? activity.windows?.[width] : null;
+    const state = !r ? "等待完整区间" : r.grade ? `${r.grade} / 4 级量价信号`
+      : r.move < 0 ? "区间价格回落" : "未达量价阈值";
+    return `<article class="activity-window${width === 15 ? " primary" : ""}">
+      <h3>${width}分钟 <span>${role}</span></h3>
+      <strong>${r ? times(r.multiple) : "—"}</strong>
+      <p>${escape(state)}${r ? ` · ${pct(r.move * 100)}` : ""}</p>
+      <small>${r ? `${escape(r.scope)} · ${r.from}–${r.clock}` : usable ? "连续分钟不足或延迟" : "等待有效行情"}</small>
+    </article>`;
+  }).join("");
+  // Day records remain visible when the latest reading cools or becomes unavailable.
+  const peak = activity.peak, shortPeak = activity.shortPeak;
   const day = summary.date === chinaNow().slice(0, 10) ? "今日" : "当日";
+  $("activity-day-title").textContent = `${summary.date || ""} · ${day}已记录信号`;
   $("activity-peak").textContent = peak
-    ? `${day}最强 · ${peak.label} · ${peak.from}–${peak.clock} · ${peak.scope} ${times(peak.multiple)}`
-    : ready ? `${day}尚未记录到达到阈值的买入量价信号` : signal.detail;
+    ? `15分钟最强 · ${peak.grade} / 4 级 · ${peak.from}–${peak.clock} · ${peak.scope} ${times(peak.multiple)}`
+    : "已获取区间内，尚未记录到15分钟量价信号";
+  $("activity-short-peak").textContent = shortPeak
+    ? `5分钟异动最强 · ${shortPeak.from}–${shortPeak.clock} · ${shortPeak.scope} ${times(shortPeak.multiple)}（预警记录）`
+    : "已获取区间内，尚未记录到5分钟异动提醒";
+  const events = activity.events || [];
+  $("activity-history-title").textContent = `查看15分钟信号记录 · ${events.length} 段`;
+  $("activity-history-list").innerHTML = events.length ? [...events].reverse().map((event) =>
+    `<li><b>${event.firstClock}${event.lastClock !== event.firstClock ? `–${event.lastClock}` : ""} 观察到信号</b><span>最强区间 ${event.peak.from}–${event.peak.clock} · ${event.peak.scope} ${times(event.peak.multiple)} · ${event.peak.grade} / 4 级</span></li>`
+  ).join("") : "<li>已获取区间内暂无记录。</li>";
+  $("activity-history-note").textContent = `${activity.historyComplete ? "主力分钟覆盖完整，记录截至已完成区间。" : "当日分钟覆盖尚不完整或存在延迟，未记录不等于全天没有。"}连续重叠窗口合并为一段，30分钟只作参考；量价信号不能识别买方身份。`;
 }
 
 function renderHero(view) {
@@ -575,10 +600,10 @@ function renderHero(view) {
     ? "等待有效数据"
     : today
       ? market.session
-        ? "今日结论 · 实时跟踪"
-        : `今日结论 · ${market.label}`
-      : `${summary.date} 结论 · 最近交易日`;
-  $("question").textContent = today || !summary.date ? "汪汪队今天进场了吗？" : `汪汪队 ${summary.date.slice(5).replace("-", " 月 ")} 日进场了吗？`;
+        ? "当前信号 · 15分钟主判断"
+        : `15分钟信号 · ${market.label}`
+      : `${summary.date} 15分钟信号 · 最近交易日`;
+  $("question").textContent = "汪汪队观察池，现在有动作吗？";
   $("eyebrow-dot").className = `live-dot ${market.session && market.fresh ? "live" : ""}`;
   const headline = signal.headline.replace(/。$/, "");
   const element = $("conclusion-headline");

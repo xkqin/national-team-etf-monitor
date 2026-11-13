@@ -619,10 +619,11 @@ export const ACTIVITY = {
   minMove: 0.0002,
 };
 
-// Current activity uses completed 5/15-minute windows, not the day's cumulative ratio.
+// Fifteen minutes drives the headline; five is an alert and thirty is context.
 // Require every fund in the selected scope at both endpoints; gaps are unknown, never zero.
 export function activityFor(rows, minuteMap, minute, shape = null) {
-  const unavailable = (reason) => ({ available: false, reason, current: null, peak: null });
+  const unavailable = (reason) => ({ available: false, reason, current: null, peak: null,
+    windows: { 5: null, 15: null, 30: null }, shortPeak: null, events: [], historyComplete: false });
   if (!Number.isFinite(minute) || minute < 10) return unavailable("开盘后积累至少 10 分钟再判断");
   const core = rows.filter((row) => row.group === "沪深300");
   if (core.length !== 4) return unavailable("等待四只沪深300 ETF 行情");
@@ -635,7 +636,7 @@ export function activityFor(rows, minuteMap, minute, shape = null) {
   if (!ready(core)) return unavailable("等待四只沪深300 ETF 的逐分钟数据与基线");
   const last = Math.min(...core.map((row) => Math.max(...maps.get(row.symbol).keys())));
   const end = Math.min(cutoff, last);
-  if (cutoff - end > ACTIVITY.maxLag) return unavailable("主力 ETF 分钟数据延迟，暂缓强度判断");
+  const delayed = cutoff - end > ACTIVITY.maxLag;
   const scopes = [{ name: "沪深300 主力", rows: core }];
   if (rows.length === 23 && ready(rows)) scopes.push({ name: "全池", rows });
   function windowFor(scope, at, width) {
@@ -668,28 +669,40 @@ export function activityFor(rows, minuteMap, minute, shape = null) {
       if (breadth < 0.75) grade = Math.min(grade, 2);
     }
     return { grade, label: ACTIVITY.labels[grade], scope: scope.name, width, start, end: at,
-      from: clockFor(start), clock: clockFor(at), amount, expected, multiple, move, rising, count: scope.rows.length };
+      from: start === 120 && at > 120 ? "13:00" : clockFor(start), clock: clockFor(at), amount, expected, multiple, move, rising, count: scope.rows.length };
   }
-  const choose = (items) => items.filter(Boolean).sort((a, b) => b.grade - a.grade || b.end - a.end || a.width - b.width || b.multiple - a.multiple)[0] || null;
-  function atTime(at) {
-    return choose(scopes.flatMap((scope) => {
-      const short = windowFor(scope, at, 5);
-      const long = windowFor(scope, at, 15);
-      // A prior rally must not override fresh selling in the last five minutes.
-      if (long && (!short || short.move < 0)) long.grade = 0;
-      if (long) long.label = ACTIVITY.labels[long.grade];
-      return [short, long];
-    }));
-  }
-  const current = atTime(end);
-  if (!current) return unavailable("分钟区间不完整，等待连续成交数据");
-  const peaks = [];
+  const choose = (items) => items.filter(Boolean).sort((a, b) => b.grade - a.grade || b.multiple - a.multiple)[0] || null;
+  const atTime = (at, width) => choose(scopes.map((scope) => windowFor(scope, at, width)));
+  const windows = Object.fromEntries([5, 15, 30].map((width) => [width, delayed ? null : atTime(end, width)]));
+  const current = windows[15];
+  const peaks = [], shortPeaks = [], events = [];
+  let event = null;
+  // Reconstruct the whole observed day, even if the latest window is incomplete.
+  // Adjacent qualifying 15-minute observations form one episode, not independent votes.
   for (let at = 10; at <= end; at++) {
-    const point = atTime(at);
-    if (point?.grade) peaks.push(point);
+    const point = atTime(at, 15), short = atTime(at, 5);
+    if (short?.grade) shortPeaks.push(short);
+    if (point?.grade) {
+      peaks.push(point);
+      if (!event || event.lastEnd !== at - 1) {
+        event = { firstEnd: at, lastEnd: at, firstClock: point.clock, lastClock: point.clock, peak: point };
+        events.push(event);
+      } else {
+        event.lastEnd = at; event.lastClock = point.clock;
+        event.peak = choose([event.peak, point]);
+      }
+    } else event = null;
   }
-  const peak = peaks.sort((a, b) => b.grade - a.grade || b.multiple - a.multiple || b.end - a.end || a.width - b.width)[0] || null;
-  return { available: true, reason: "", current, peak, lag: Math.max(0, minute - end) };
+  const strongest = (points) => points.sort((a, b) => b.grade - a.grade || b.multiple - a.multiple || b.end - a.end)[0] || null;
+  const historyComplete = !delayed && end >= 20 && core.every((row) => {
+    const records = maps.get(row.symbol);
+    for (let t = 5; t <= end; t++) if (!records.has(t)) return false;
+    return true;
+  });
+  const reason = delayed ? "主力 ETF 分钟数据延迟，暂缓强度判断"
+    : current ? "" : "等待同一交易时段内完整的15分钟区间（开盘首5分钟不计）";
+  return { available: !!current, reason, current, windows, peak: strongest(peaks),
+    shortPeak: strongest(shortPeaks), events, historyComplete, lag: Math.max(0, minute - end) };
 }
 
 export function signalFor(summary, state, activity) {
@@ -734,8 +747,8 @@ export function signalFor(summary, state, activity) {
       level: "neutral",
       detail: activity?.reason || "等待逐分钟数据，全天量能仍可查看。",
     };
-  const { current, peak } = activity;
-  const headlines = [peak ? "有过动作，当前趋缓。" : "暂未见明显动作。", "疑似小幅试探。", "疑似温和上班。", "疑似积极上班。", "疑似明显加力。"];
+  const { current } = activity;
+  const headlines = ["当前未见明显信号。", "当前轻度放量上行。", "当前温和放量上行。", "当前明显放量上行。", "当前强烈放量上行。"];
   const evidence = `${current.scope}近 ${current.width} 分钟 ${current.multiple.toFixed(2)}×，区间涨跌 ${(current.move * 100).toFixed(2)}%。`;
   return {
     title: current.label,
@@ -744,6 +757,6 @@ export function signalFor(summary, state, activity) {
     label: current.label,
     level: ["calm", "light", "watch", "active", "strong"][current.grade],
     grade: current.grade,
-    detail: "以近期放量、区间涨幅与上涨家数共同判断；仅为量价信号。",
+    detail: "以15分钟放量、区间涨幅与上涨家数共同判断；5分钟预警和30分钟参考单独展示。",
   };
 }

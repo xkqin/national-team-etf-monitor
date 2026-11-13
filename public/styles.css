@@ -166,6 +166,24 @@ svg { display: block; }
 .activity-meter.level-strong .on { background: var(--up); }
 .activity-scale { margin-top: 6px; font-size: 11px; color: var(--fg-3); text-align: center; }
 .activity-peak { margin: 12px 0 0; color: var(--fg-2); font-size: 13px; line-height: 1.5; }
+.activity-windows { margin-top: 20px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; }
+.activity-window { min-width: 0; border: 1px solid var(--hair-2); border-radius: 14px; padding: 12px; background: rgba(255,255,255,.7); }
+.activity-window.primary { border-color: rgba(40,100,220,.3); background: rgba(40,100,220,.05); }
+.activity-window h3 { margin: 0 0 9px; font-size: 15px; }
+.activity-window h3 span { display: block; margin-top: 2px; font-size: 11px; color: var(--fg-2); font-weight: 500; }
+.activity-window strong { font-size: 25px; font-family: var(--font-display); }
+.activity-window p { margin: 5px 0; font-size: 12px; line-height: 1.5; }
+.activity-window small { display: block; color: var(--fg-3); font-size: 11px; line-height: 1.5; }
+.activity-day { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--hair-2); }
+.activity-day h2 { margin: 0; font-size: 14px; color: var(--fg-2); letter-spacing: 0; }
+.activity-day .activity-peak { margin-top: 7px; }
+.activity-history { margin-top: 10px; font-size: 12px; color: var(--fg-2); }
+.activity-history summary { cursor: pointer; font-weight: 600; }
+.activity-history ol { padding-left: 20px; }
+.activity-history li { padding: 4px 0; }
+.activity-history li span { display: block; margin-top: 3px; font-size: 12px; font-weight: 400; }
+.activity-history-note { margin: 8px 0 0; color: var(--fg-3); font-size: 11px; line-height: 1.5; }
+@media (max-width: 420px) { .activity-window { padding: 9px 7px; } .activity-window strong { font-size: 22px; } }
 
 .gauge-card { margin: 0 auto; width: 100%; max-width: 360px; padding: 22px 20px 20px; border-radius: var(--radius); background: rgba(255, 255, 255, .78); box-shadow: var(--shadow-lg); border: 1px solid var(--hair-2); text-align: center; -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
 .gauge { width: 100%; max-width: 260px; margin: 0 auto; overflow: visible; }
