@@ -6,8 +6,6 @@ import {
   activityFor,
   ACTIVITY,
   liveSummary,
-  parseMinuteLines,
-  parseTrendLines,
   poolMinutes,
   fundPulses,
   profileAt,
@@ -16,7 +14,8 @@ import {
   tradingMinute,
   LIVE_MIN_MINUTE,
   minuteFeedMode,
-} from "./core.js?v=20261113a";
+} from "./core.js?v=20261113b";
+import { createMinuteFetcher, tencentDays, trendDays } from "./minute-source.js?v=20261113b";
 
 // Minute lines change once a minute; the chart's live tip moves every second from the quotes.
 const MINUTE_MS = 60_000;
@@ -178,15 +177,9 @@ async function refreshShape() {
     const results = await Promise.allSettled(
       SHAPE_FUNDS.map(async (symbol) => {
         try {
-          return [...(await trendDays(symbol, 5))].map(([date, records]) => ({ date, records }));
+          return [...(await trendDays(fetchText, symbol, 5))].map(([date, records]) => ({ date, records }));
         } catch {
-          const payload = JSON.parse(
-            await fetchText(`https://web.ifzq.gtimg.cn/appstock/app/day/query?code=${symbol}&_=${Date.now()}`, 15_000),
-          );
-          return (payload.data?.[symbol]?.data || []).map((day) => ({
-            date: `${day.date.slice(0, 4)}-${day.date.slice(4, 6)}-${day.date.slice(6, 8)}`,
-            records: parseMinuteLines(day.data),
-          }));
+          return [...(await tencentDays(fetchText, symbol))].map(([date, records]) => ({ date, records }));
         }
       }),
     );
@@ -270,73 +263,12 @@ async function loadBaselineDirect() {
   render();
 }
 
-// Prefer the browser-accessible feed. Repeated connection failures rest a host for five
-// minutes, while a single fund with no records can still fall back to the other feed.
-const SOURCE_COOLDOWN_MS = 5 * 60_000;
+// Share source health across the existing minute rounds; no extra polling timer.
 const secid = (symbol) => `${symbol.startsWith("sh") ? "1" : "0"}.${symbol.slice(2)}`;
-const sourceUp = (name) => !(state.sourceDown?.[name] > Date.now());
-function sourceFailed(name, error) {
-  const connectionFailure = error.name === "TypeError" || error.name === "TimeoutError" || /^HTTP (429|5\d\d)$/.test(error.message);
-  if (!connectionFailure) return;
-  state.sourceFailures[name] = (state.sourceFailures[name] || 0) + 1;
-  if (state.sourceFailures[name] >= 3) state.sourceDown[name] = Date.now() + SOURCE_COOLDOWN_MS;
-}
-
-async function minuteFromTencent(symbol) {
-  const payload = JSON.parse(
-    await fetchText(`https://web.ifzq.gtimg.cn/appstock/app/minute/query?code=${symbol}&_=${Date.now()}`, 8_000),
-  );
-  const minute = payload.data?.[symbol]?.data;
-  if (!minute?.date || !Array.isArray(minute.data)) throw new Error("分时数据为空");
-  return {
-    date: `${minute.date.slice(0, 4)}-${minute.date.slice(4, 6)}-${minute.date.slice(6, 8)}`,
-    records: parseMinuteLines(minute.data),
-    source: "腾讯",
-  };
-}
-
-async function trendDays(symbol, days) {
-  const payload = JSON.parse(
-    await fetchText(
-      `https://push2his.eastmoney.com/api/qt/stock/trends2/get?secid=${secid(symbol)}&fields1=f1&fields2=f51,f52,f53,f56,f57&ndays=${days}&iscr=0&_=${Date.now()}`,
-      10_000,
-    ),
-  );
-  const lines = payload.data?.trends;
-  if (!Array.isArray(lines) || !lines.length) throw new Error("分时数据为空");
-  return parseTrendLines(lines);
-}
-
-async function minuteFromEastmoney(symbol) {
-  const days = await trendDays(symbol, 1);
-  const date = [...days.keys()].sort().at(-1);
-  return { date, records: days.get(date), source: "东方财富" };
-}
-
+const fetchMinute = createMinuteFetcher({
+  fetchText, status: state.sourceStatus, down: state.sourceDown, failures: state.sourceFailures,
+});
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-async function fetchMinute(symbol) {
-  const order = ["eastmoney", "tencent"].filter(sourceUp);
-  let lastError = new Error("分钟行情源暂处于重试冷却期");
-  for (const name of order) {
-    try {
-      const result = await (name === "tencent" ? minuteFromTencent(symbol) : minuteFromEastmoney(symbol));
-      if (!result.records?.length) throw new Error("分时数据为空");
-      state.sourceFailures[name] = 0;
-      state.sourceDown[name] = 0;
-      state.sourceStatus[name] = { ok: Date.now(), error: state.sourceStatus[name]?.error || "" };
-      return result;
-    } catch (error) {
-      lastError = error;
-      sourceFailed(name, error);
-      // fetch() rejects with a bare TypeError when CORS, an extension or the network blocks it.
-      const reason =
-        error.name === "TimeoutError" ? "请求超时" : error.name === "TypeError" ? "请求被拦截（跨域 / 扩展 / 网络）" : error.message || "失败";
-      state.sourceStatus[name] = { ok: state.sourceStatus[name]?.ok || 0, error: reason, at: Date.now() };
-    }
-  }
-  throw lastError;
-}
 
 // Minute lines every 60 s while trading; after a pause starts, keep fetching (60 s apart) only
 // until the minute data has caught up with the last quote, then stop.
@@ -365,7 +297,7 @@ async function refreshMinutes(force = false) {
     const failed = [];
     for (let start = 0; start < pending.length; start += 4) {
       const batch = pending.slice(start, start + 4);
-      const results = await Promise.allSettled(batch.map((symbol) => fetchMinute(symbol)));
+      const results = await Promise.allSettled(batch.map((symbol) => fetchMinute(symbol, state.summary?.date)));
       results.forEach((result, index) => {
         if (result.status === "fulfilled" && result.value.records?.length) state.minutes[batch[index]] = result.value;
         else failed.push(batch[index]);
