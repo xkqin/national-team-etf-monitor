@@ -14,7 +14,7 @@ on:
     - cron: "10 7 * * 1-5"
 
 permissions:
-  contents: read
+  contents: write # Persist public ETF history on the separate activity-data branch.
   actions: read
   pages: write
   id-token: write
@@ -38,6 +38,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+      - name: Open durable public activity archive
+        uses: actions/checkout@v4
+        with:
+          ref: activity-data
+          path: .activity-archive
       - name: Collect current public data
         id: collect
         continue-on-error: true
@@ -45,10 +50,26 @@ jobs:
       - name: Record preserved snapshot
         if: steps.collect.outcome == 'failure'
         run: echo 'Public quote collection failed. Deploying the preserved snapshot with its original timestamp.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Collect dated activity minutes
+        id: activity_minutes
+        continue-on-error: true
+        run: python scripts/collect_activity.py "$RUNNER_TEMP/activity-minutes.json"
+      - name: Build daily summaries and preserve previous dates
+        run: node scripts/archive_activity.mjs --input "$RUNNER_TEMP/activity-minutes.json" --archive-dir .activity-archive
       - name: Verify calculations and data
         run: |
           npm test
           python -m unittest discover -s tests -p '*_test.py'
+      - name: Persist public daily records
+        working-directory: .activity-archive
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add history.json days
+          if ! git diff --cached --quiet; then
+            git commit -m "Archive public ETF daily activity"
+            git push origin HEAD:activity-data
+          fi
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

@@ -14,8 +14,11 @@ import {
   tradingMinute,
   LIVE_MIN_MINUTE,
   minuteFeedMode,
-} from "./core.js?v=20261113b";
+} from "./core.js?v=20261117a";
 import { createMinuteFetcher, tencentDays, trendDays } from "./minute-source.js?v=20261113b";
+import { createJournal } from "./journal-ui.js?v=20261117a";
+
+const journal = createJournal();
 
 // Minute lines change once a minute; the chart's live tip moves every second from the quotes.
 const MINUTE_MS = 60_000;
@@ -452,7 +455,7 @@ function buildView() {
     },
   ];
   const minuteMode = minuteFeedMode({ hasRecords: series.length > 0, coarse, attempted: state.lastMinute > 0, loading: state.minuteLoading });
-  return { summary, market, signal, activity, profiles, shape, series, coarse, minuteMode, used, indexMinutes, hs300, events, groups, core, skew, buyPulses, defensePulses, evidence };
+  return { summary, market, signal, activity, minuteMap, profiles, shape, series, coarse, minuteMode, used, indexMinutes, hs300, events, groups, core, skew, buyPulses, defensePulses, evidence };
 }
 
 /* ---------------- Render ---------------- */
@@ -462,6 +465,7 @@ function render() {
   state.summary = view.summary;
   state.view = view;
   renderHero(view);
+  journal.update(view);
   renderTicker();
   renderGauge(view.summary.ratio, levelOf(view.summary.ratio));
   renderKpis(view);
@@ -1190,7 +1194,7 @@ new ResizeObserver(() => {
 }).observe($("intraday-chart"));
 
 // Nav: scroll progress + active section
-const sections = ["overview", "intraday", "groups", "funds", "methodology"];
+const sections = ["overview", "journal", "intraday", "groups", "funds", "methodology"];
 window.addEventListener(
   "scroll",
   () => {

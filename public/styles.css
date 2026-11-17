@@ -228,6 +228,60 @@ svg { display: block; }
 .section-sub { margin: 8px 0 0; color: var(--fg-2); font-size: 15px; max-width: 640px; }
 .card { background: var(--tile); border-radius: var(--radius); border: 1px solid var(--hair-2); box-shadow: var(--shadow); }
 
+/* ---------- Daily journal ---------- */
+.journal-shortcut { margin: 16px 0 0; font-size: 14px; font-weight: 500; }
+.journal-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; align-items: stretch; }
+@media (min-width: 920px) { .journal-grid { grid-template-columns: minmax(340px, .9fr) minmax(0, 1.1fr); } }
+.calendar-card, .journal-detail { padding: clamp(18px, 3vw, 30px); min-width: 0; }
+.calendar-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.calendar-head h3 { margin: 0; font: 600 22px/1.3 var(--font-display); letter-spacing: -.02em; }
+.calendar-head button { width: 36px; height: 36px; border: 0; border-radius: 50%; background: var(--mist); cursor: pointer; font-size: 26px; line-height: 1; }
+.calendar-head button:disabled { opacity: .3; cursor: default; }
+.calendar-today { background: #fff; border: 1px solid var(--hair); border-radius: 980px; padding: 9px 18px; font-size: 13px; cursor: pointer; }
+.calendar-stats { margin: 9px 0 22px; font-size: 13px; color: var(--fg-3); }
+.calendar-week, .calendar-days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+.calendar-days { grid-auto-rows: 62px; }
+.calendar-week { margin-bottom: 10px; text-align: center; color: var(--fg-3); font-size: 12px; }
+.calendar-day { position: relative; display: grid; place-content: center; gap: 4px; min-height: 62px; padding: 6px 0; border-radius: 13px; border: 1px solid transparent; cursor: pointer; transition: box-shadow .2s, transform .2s; }
+.calendar-day b { font: 600 18px/1.1 var(--font-display); }
+.calendar-day span { font-size: 10px; white-space: nowrap; }
+.calendar-day.is-empty { background: var(--mist); color: var(--fg-3); }
+.calendar-day.selected { box-shadow: 0 0 0 2px var(--fg); border-color: white; }
+.calendar-day.today b { text-decoration: underline; text-underline-offset: 4px; }
+.calendar-day:enabled:hover { transform: translateY(-2px); }
+.calendar-day:disabled { cursor: default; opacity: .35; }
+.calendar-day i { position: absolute; right: 5px; top: 5px; width: 4px; height: 4px; background: currentColor; border-radius: 50%; }
+.grade-0 { background: #edf2f8; color: #46576d; }
+.grade-1 { background: #efeaff; color: #6538c2; }
+.grade-2 { background: #fff1d9; color: #8e5700; }
+.grade-3 { background: #ffe7da; color: #bd4016; }
+.grade-4 { background: #ffe1e7; color: #b82443; }
+.calendar-legend { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 22px; }
+.calendar-legend span { padding: 4px 10px; font-size: 11px; border-radius: 6px; }
+.calendar-key, .journal-foot, .journal-quality { color: var(--fg-3); font-size: 12px; line-height: 1.65; }
+.calendar-key { margin: 12px 0 0; }
+.journal-title { margin: 6px 0 0; font: 600 clamp(26px, 3vw, 34px)/1.2 var(--font-display); letter-spacing: -.025em; background: none; text-wrap: balance; }
+.journal-sentence { margin: 14px 0 0; color: var(--fg-2); font-size: 15px; line-height: 1.65; }
+.journal-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; padding: 22px 0; margin-top: 6px; border-bottom: 1px solid var(--hair); }
+.journal-metrics div { display: grid; gap: 8px; }
+.journal-metrics span { font-size: 12px; color: var(--fg-3); }
+.journal-metrics strong { font: 600 30px/1.1 var(--font-display); letter-spacing: -.03em; }
+.journal-metrics small { font-size: 13px; font-weight: 500; color: var(--fg-3); letter-spacing: 0; }
+.journal-peak { color: var(--fg-2); font-size: 13px; line-height: 1.6; margin: 16px 0; }
+.journal-peak:empty { display: none; }
+.journal-events { margin: 18px 0 0; padding: 0; list-style: none; max-height: 235px; overflow-y: auto; }
+.journal-events li { display: flex; gap: 18px; align-items: baseline; border-top: 1px solid var(--hair-2); padding: 13px 0; font-size: 13px; }
+.journal-events time { flex: none; font-weight: 600; color: var(--fg); }
+.journal-events div { display: grid; gap: 4px; }
+.journal-events b { font-weight: 600; }
+.journal-events span { color: var(--fg-3); font-size: 12px; }
+.journal-events .journal-empty { color: var(--fg-3); }
+.journal-quality { margin: 18px 0 0; }
+.journal-foot { margin: 18px 2px 0; }
+.calendar-load { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: 12px; color: var(--fg-3); margin: 8px 2px 0; }
+.calendar-load button { background: none; border: 0; color: var(--link); cursor: pointer; padding: 0; }
+@media (max-width: 399px) { .calendar-week, .calendar-days { gap: 4px; } .calendar-days { grid-auto-rows: 56px; } .calendar-day { min-height: 56px; border-radius: 10px; } .journal-events li { gap: 12px; } }
+
 /* ---------- Intraday ---------- */
 .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--fg-2); }
 .legend span { display: inline-flex; align-items: center; gap: 6px; }

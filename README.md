@@ -7,6 +7,7 @@
 ## 页面
 
 - **实时结论**：15分钟固定作为主判断，5分钟仅提醒异动，30分钟仅参考持续性；分开展示当前强度、今日15分钟记录及5分钟异动最强区间。全天量能仪表与五项辅助证据保留。
+- **上班日历**：月历颜色表示当天最高15分钟量价强度，点击日期查看每日总结、信号段数、读数时长、最强区间和全部出现时段。盘中暂计、收盘归档、覆盖不全与未归档分别显示。
 - **盘中走势**：沪深300 指数、全池累计成交额对同时点均值、每分钟成交额与放量脉冲，同一时间轴；末端每秒随实时行情延伸。右侧为单只 ETF 的分钟级异动流。
 - **分组**：七个指数组各自的放大倍数、主动净买入与涨跌，点击筛选明细。
 - **明细**：23 只 ETF 的价格、涨跌、成交额、放大倍数、主动净买入、溢价率与分时迷你图，可搜索、排序。
@@ -40,6 +41,21 @@
 - 分时：腾讯分时、[东方财富](https://quote.eastmoney.com/sh510300.html)分时（浏览器直连，互为备份）
 - 同时点基线：东方财富 5 分钟线与日线，由 GitHub Actions 采集为同源快照 `public/data/snapshot.json`，收盘后校对
 - 观察池来源：[中央汇金 2025 年末 ETF 持仓报道](https://finance.eastmoney.com/a/202603313690167766.html)
+
+## 每日归档
+
+`scripts/collect_activity.py`取得腾讯五日分时（东方财富备用），`scripts/archive_activity.mjs`使用与前端相同的15分钟判定函数回放，历史分母只用当日之前的完整日，固定线性插值便于复核。初始回补2026-11-11、12、13、16、17五个交易日，更早缺失的分钟不补造。
+
+每次既有Actions采集运行都把每日摘要和公开分钟证据保存到独立`activity-data`分支（`history.json`、`days/YYYY-MM-DD.json`），并将合并后的摘要发布为`public/data/activity-history.json`。分支保存历史，不受五日接口窗口、浏览器关闭或主分支更新影响；失败或较少覆盖的刷新不能覆盖完整历史。权限`contents: write`仅用于该数据分支提交，工作流只由main推送、人工触发和原有盘中定时运行触发，数据提交不会循环触发。
+
+完整收盘归档要求主力203个有效15分钟读数齐全、分时到达15:00且已收盘。相邻命中窗口合并为信号段；读数时长按命中分钟计，不能理解为真实买入时长、买入额或机构身份。5分钟预警不提升日历级别。数据证据归档和网页摘要的来源、覆盖数、截至时间均保留。
+
+本地回放（先准备最新snapshot，避免改动受跟踪的历史种子）：
+
+```sh
+python scripts/collect_activity.py /absolute/work/activity-minutes.json
+node scripts/archive_activity.mjs --input /absolute/work/activity-minutes.json --snapshot /absolute/work/snapshot.json --archive-dir /absolute/archive-checkout
+```
 
 ## 本地运行
 

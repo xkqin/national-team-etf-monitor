@@ -12,12 +12,12 @@
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
     <link rel="preconnect" href="https://qt.gtimg.cn" crossorigin />
     <link rel="preconnect" href="https://push2his.eastmoney.com" crossorigin />
-    <link rel="modulepreload" href="./core.js?v=20261113b" />
+    <link rel="modulepreload" href="./core.js?v=20261117a" />
     <link rel="preload" href="./pool.json" as="fetch" crossorigin />
     <!-- Asset URLs carry a version so a new deploy never mixes with cached old files. -->
     <link rel="stylesheet" href="./fonts.css?v=20261106f" />
-    <link rel="stylesheet" href="./styles.css?v=20261113b" />
-    <script type="module" src="./app.js?v=20261113b"></script>
+    <link rel="stylesheet" href="./styles.css?v=20261117a" />
+    <script type="module" src="./app.js?v=20261117a"></script>
   </head>
   <body>
     <a class="skip" href="#main">跳到正文</a>
@@ -32,6 +32,7 @@
         </a>
         <nav class="nav-links" aria-label="主导航">
           <a href="#overview">实时结论</a>
+          <a href="#journal">上班日历</a>
           <a href="#intraday">盘中走势</a>
           <a href="#groups">分组</a>
           <a href="#funds">明细</a>
@@ -91,6 +92,7 @@
                 <span class="tag subtle" id="coverage">23 只宽基 ETF</span>
                 <span class="tag subtle" id="baseline-note">前 20 个完整交易日同时点基线</span>
               </div>
+              <p class="journal-shortcut"><a href="#journal">查看每日总结与历史日历 ↓</a></p>
             </div>
             <figure class="gauge-card" aria-label="放大倍数仪表">
               <svg id="gauge" class="gauge" viewBox="0 0 240 150" role="img" aria-label="同时点放大倍数"></svg>
@@ -144,6 +146,44 @@
             名单为汇金 2025 年报披露的持有标签，非当前实时持仓；所有结论均为量价推断，不构成投资建议。
             <a href="#methodology">完整口径与合规说明 ↓</a>
           </p>
+        </div>
+      </section>
+
+      <section class="band journal-section" id="journal" aria-labelledby="journal-heading">
+        <div class="wrap">
+          <div class="section-head">
+            <div>
+              <p class="kicker">DAY BY DAY · 每日回看</p>
+              <h2 id="journal-heading">上班日历</h2>
+              <p class="section-sub">今天动了多少，哪天动过。一眼回看。</p>
+            </div>
+            <button type="button" class="calendar-today" id="calendar-today">回到今天</button>
+          </div>
+          <div class="journal-grid">
+            <div class="card calendar-card">
+              <div class="calendar-head">
+                <button type="button" id="calendar-prev" aria-label="上一个月">‹</button>
+                <h3 id="calendar-month"></h3>
+                <button type="button" id="calendar-next" aria-label="下一个月">›</button>
+              </div>
+              <p id="calendar-stats" class="calendar-stats"></p>
+              <div class="calendar-week" aria-hidden="true"><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span></div>
+              <div class="calendar-days" id="calendar-days" role="group" aria-label="按日期查看量价信号"></div>
+              <div class="calendar-legend"><span class="grade-0">平静</span><span class="grade-1">轻度</span><span class="grade-2">温和</span><span class="grade-3">积极</span><span class="grade-4">强力</span></div>
+              <p class="calendar-key">颜色表示当日最高15分钟信号强度。小圆点表示盘中暂计或覆盖不全；未归档不等于没有动作。</p>
+            </div>
+            <article class="card journal-detail" aria-labelledby="journal-title">
+              <p class="kicker" id="journal-date"></p>
+              <h3 class="journal-title" id="journal-title">正在整理每日总结</h3>
+              <p class="journal-sentence" id="journal-sentence"></p>
+              <div class="journal-metrics" id="journal-metrics"></div>
+              <p class="journal-peak" id="journal-peak"></p>
+              <ol class="journal-events" id="journal-events" aria-label="当日信号时段"></ol>
+              <p class="journal-quality" id="journal-quality"></p>
+            </article>
+          </div>
+          <p class="journal-foot">相邻命中的15分钟滚动窗口合并为一段。读数时长统计信号连续出现的分钟数，不代表实际买入时长或资金量。每日总结按固定历史基线回放，量价信号无法识别交易账户。</p>
+          <p class="calendar-load"><span id="calendar-load-state" role="status">正在读取云端历史…</span><button id="calendar-retry" type="button" hidden>重试</button></p>
         </div>
       </section>
 
@@ -282,6 +322,7 @@
               <li>五项辅助证据：15分钟放量、15分钟价格同步上行、全天外内盘差占成交 ≥ +3%、加权溢价 ≥ +0.10%、今日指数低于昨收时出现放量拉升。它们展示不同时间范围的背景，命中数不是机构概率，也不直接相加生成强度。主动净买入为成交额 ×（外盘量 − 内盘量）÷（外盘量 + 内盘量），方向受套利、对冲与撮合口径影响。</li>
               <li>历史 5 分钟线与日线由 GitHub Actions 从东方财富采集并部署为同源快照，收盘后校对；快照只作为分母与断线兜底，盘中数字以浏览器直连的实时行情为准。</li>
               <li>所有指标均为公开行情的量价推断。交易账户身份、真实申购赎回与机构持仓以基金定期报告与独立披露为准。本页不构成投资建议。</li>
+              <li>上班日历按真实逐分钟数据回放15分钟主信号，使用当日之前最多20个完整交易日的五分钟基线并线性插值，排除未来数据。颜色为当日最高级别，5分钟提醒不提升日历级别。完整收盘归档需主力203个有效读数齐全且分时到达15:00；盘中与缺口分别标注，不将缺失写成零信号。信号读数时长为相邻滚动窗口命中的分钟数，并非真实下单持续时间。近期可用的5个交易日先回补，此后由GitHub Actions持续归档到独立数据分支，网页关闭也可积累；较早空白日期不作推断。</li>
             </ul>
             <div class="sources">
               <a href="https://gu.qq.com/sh510300" target="_blank" rel="noopener noreferrer">腾讯财经行情 ↗</a>
