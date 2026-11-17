@@ -614,16 +614,16 @@ export function aggregate(funds, quotes, history) {
 
 export const ACTIVITY = {
   thresholds: [1.2, 1.5, 2, 3],
-  labels: ["未见明显动作", "轻度试探", "温和发力", "积极进场", "明显加力"],
+  labels: ["未见明显信号", "轻度放量上行", "温和放量上行", "明显放量上行", "强烈放量上行"],
   maxLag: 3,
   minMove: 0.0002,
 };
 
 // Fifteen minutes drives the headline; five is an alert and thirty is context.
 // Require every fund in the selected scope at both endpoints; gaps are unknown, never zero.
-export function activityFor(rows, minuteMap, minute, shape = null) {
+export function activityFor(rows, minuteMap, minute, shape = null, { daily = false } = {}) {
   const unavailable = (reason) => ({ available: false, reason, current: null, peak: null,
-    windows: { 5: null, 15: null, 30: null }, shortPeak: null, events: [], observations: [], historyComplete: false });
+    windows: { 5: null, 15: null, 30: null }, shortPeak: null, events: [], observations: [], scopeReadings: [], historyComplete: false });
   if (!Number.isFinite(minute) || minute < 10) return unavailable("开盘后积累至少 10 分钟再判断");
   const core = rows.filter((row) => row.group === "沪深300");
   if (core.length !== 4) return unavailable("等待四只沪深300 ETF 行情");
@@ -676,12 +676,18 @@ export function activityFor(rows, minuteMap, minute, shape = null) {
   const windows = Object.fromEntries([5, 15, 30].map((width) => [width, delayed ? null : atTime(end, width)]));
   const current = windows[15];
   const peaks = [], shortPeaks = [], events = [], observations = [];
+  const scopeReadings = daily ? scopes.map(scope => ({ scope: scope.name, fifteen: [], thirty: [] })) : [];
   let event = null;
   // Reconstruct the whole observed day, even if the latest window is incomplete.
   // Adjacent qualifying 15-minute observations form one episode, not independent votes.
   for (let at = 10; at <= end; at++) {
     const point = atTime(at, 15), short = atTime(at, 5);
     if (point) observations.push(point);
+    if (daily) scopes.forEach((scope, index) => {
+      const fifteen = windowFor(scope, at, 15), thirty = windowFor(scope, at, 30);
+      if (fifteen) scopeReadings[index].fifteen.push(fifteen);
+      if (thirty) scopeReadings[index].thirty.push(thirty);
+    });
     if (short?.grade) shortPeaks.push(short);
     if (point?.grade) {
       peaks.push(point);
@@ -703,7 +709,7 @@ export function activityFor(rows, minuteMap, minute, shape = null) {
   const reason = delayed ? "主力 ETF 分钟数据延迟，暂缓强度判断"
     : current ? "" : "等待同一交易时段内完整的15分钟区间（开盘首5分钟不计）";
   return { available: !!current, reason, current, windows, peak: strongest(peaks),
-    shortPeak: strongest(shortPeaks), events, observations, historyComplete, lag: Math.max(0, minute - end) };
+    shortPeak: strongest(shortPeaks), events, observations, scopeReadings, historyComplete, lag: Math.max(0, minute - end) };
 }
 
 export function signalFor(summary, state, activity) {

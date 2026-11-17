@@ -16,6 +16,30 @@ const maybeJson = async file => { try { return await json(file); } catch (e) { i
 const pool = await json(path.join(root, "public/pool.json"));
 const snapshot = await json(snapshotFile);
 const previous = await maybeJson(archiveDir ? path.join(archiveDir, "history.json") : destination) || { version: 1, records: [] };
+function replay(date, rows, minuteMap, source) {
+  const core = rows.filter(r => r.group === "沪深300");
+  if (core.length !== 4 || core.some(r => !r.profile || !minuteMap[r.symbol]?.length)) return null;
+  const lastMinute = Math.min(...core.map(r => minuteMap[r.symbol].at(-1).minute));
+  const activity = activityFor(rows, minuteMap, lastMinute, null, { daily: true });
+  const through = activity.observations?.at(-1)?.end;
+  const poolCoverage = rows.filter(r => {
+    const minutes = new Set((minuteMap[r.symbol] || []).map(p => p.minute));
+    return r.profile && through && Array.from({ length: through - 4 }, (_, i) => i + 5).every(t => minutes.has(t));
+  }).length;
+  return summarizeDay({ date, activity, lastMinute, poolCoverage, source });
+}
+// Reclassify saved days using their frozen public evidence, including days no longer
+// available in a provider's five-day feed. Never silently retain peak-only day labels.
+if (archiveDir) for (let index = 0; index < previous.records.length; index++) {
+  const old = previous.records[index];
+  if (old.rule === JOURNAL_RULE) continue;
+  const evidence = await maybeJson(path.join(archiveDir, "days", `${old.date}.json`));
+  if (!evidence) continue;
+  const map = Object.fromEntries(Object.entries(evidence.minutes).map(([symbol, values]) => [symbol,
+    values.map(([minute, price, cumulative]) => ({ minute, price, cumulative }))]));
+  const record = replay(old.date, evidence.rows, map, old.source);
+  if (record) previous.records[index] = record;
+}
 const raw = await maybeJson(input);
 const funds = new Map();
 for (const [symbol, item] of Object.entries(raw?.symbols || {})) {
@@ -29,18 +53,8 @@ const incoming = [];
 for (const date of dates) {
   const minuteMap = Object.fromEntries(pool.map(f => [f.symbol, funds.get(f.symbol)?.get(date) || []]));
   const rows = pool.map(f => ({ ...f, profile: intradayProfile(snapshot.history[f.symbol]?.fiveMinute, date) }));
-  const core = rows.filter(r => r.group === "沪深300");
-  if (core.some(r => !r.profile || !minuteMap[r.symbol].length)) continue;
-  const lastMinute = Math.min(...core.map(r => minuteMap[r.symbol].at(-1).minute));
-  // Only actual completed minutes; historical closed sessions end at 240.
-  const activity = activityFor(rows, minuteMap, lastMinute, null);
-  const through = activity.observations?.at(-1)?.end;
-  const poolCoverage = rows.filter(r => {
-    const minutes = new Set(minuteMap[r.symbol].map(p => p.minute));
-    return r.profile && through && Array.from({ length: through - 4 }, (_, i) => i + 5).every(t => minutes.has(t));
-  }).length;
   const sources = [...new Set(pool.filter(f => minuteMap[f.symbol].length).map(f => raw.symbols[f.symbol]?.source).filter(Boolean))];
-  const record = summarizeDay({ date, activity, lastMinute, poolCoverage, source: `${sources.join(" / ")} · 云端回放归档` });
+  const record = replay(date, rows, minuteMap, `${sources.join(" / ")} · 云端回放归档`);
   if (!record) continue;
   incoming.push(record);
   const retained = mergeRecords(previous.records, [record]).find(r => r.date === date);
@@ -66,7 +80,7 @@ for (const record of incoming) {
 }
 const records = mergeRecords(previous.records, incoming);
 if (!records.length) throw new Error("No usable calendar history. Existing archive preserved.");
-const changed = JSON.stringify(records) !== JSON.stringify(previous.records);
+const changed = previous.rule !== JOURNAL_RULE || JSON.stringify(records) !== JSON.stringify(previous.records);
 const history = { version: 1, rule: JOURNAL_RULE, generatedAt: changed ? new Date().toISOString() : previous.generatedAt, records };
 const body = JSON.stringify(history) + "\n";
 await writeFile(destination, body);

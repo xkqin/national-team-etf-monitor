@@ -6,18 +6,18 @@
     <meta name="theme-color" content="#ffffff" />
     <meta
       name="description"
-      content="盘中实时跟踪汇金 2025 年报持有的 23 只宽基 ETF：同时点放大倍数、主动买卖、IOPV 溢价与分钟级放量脉冲，判断汪汪队今天是否在场。"
+      content="实时观察23只宽基ETF的量价异动与持续性，按日回看历史。公开行情不能识别国家队账户。"
     />
     <title>汪汪队 ETF 观察站 · 盘中实时</title>
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
     <link rel="preconnect" href="https://qt.gtimg.cn" crossorigin />
     <link rel="preconnect" href="https://push2his.eastmoney.com" crossorigin />
-    <link rel="modulepreload" href="./core.js?v=20261117a" />
+    <link rel="modulepreload" href="./core.js?v=20261117b" />
     <link rel="preload" href="./pool.json" as="fetch" crossorigin />
     <!-- Asset URLs carry a version so a new deploy never mixes with cached old files. -->
     <link rel="stylesheet" href="./fonts.css?v=20261106f" />
-    <link rel="stylesheet" href="./styles.css?v=20261117a" />
-    <script type="module" src="./app.js?v=20261117a"></script>
+    <link rel="stylesheet" href="./styles.css?v=20261117b" />
+    <script type="module" src="./app.js?v=20261117b"></script>
   </head>
   <body>
     <a class="skip" href="#main">跳到正文</a>
@@ -32,7 +32,7 @@
         </a>
         <nav class="nav-links" aria-label="主导航">
           <a href="#overview">实时结论</a>
-          <a href="#journal">上班日历</a>
+          <a href="#journal">历史日历</a>
           <a href="#intraday">盘中走势</a>
           <a href="#groups">分组</a>
           <a href="#funds">明细</a>
@@ -154,8 +154,8 @@
           <div class="section-head">
             <div>
               <p class="kicker">DAY BY DAY · 每日回看</p>
-              <h2 id="journal-heading">上班日历</h2>
-              <p class="section-sub">今天动了多少，哪天动过。一眼回看。</p>
+              <h2 id="journal-heading">量价日历</h2>
+              <p class="section-sub">短时异动，还是持续放量。分开看清。</p>
             </div>
             <button type="button" class="calendar-today" id="calendar-today">回到今天</button>
           </div>
@@ -169,8 +169,8 @@
               <p id="calendar-stats" class="calendar-stats"></p>
               <div class="calendar-week" aria-hidden="true"><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span></div>
               <div class="calendar-days" id="calendar-days" role="group" aria-label="按日期查看量价信号"></div>
-              <div class="calendar-legend"><span class="grade-0">平静</span><span class="grade-1">轻度</span><span class="grade-2">温和</span><span class="grade-3">积极</span><span class="grade-4">强力</span></div>
-              <p class="calendar-key">颜色表示当日最高15分钟信号强度。小圆点表示盘中暂计或覆盖不全；未归档不等于没有动作。</p>
+              <div class="calendar-legend"><span class="grade-0">常态</span><span class="grade-1">短时</span><span class="grade-2">持续</span><span class="grade-3">明显</span><span class="grade-4">强烈</span></div>
+              <p class="calendar-key">颜色按日级持续性分类，不再用一次最高值给全天定性。小圆点表示盘中或覆盖不全。任何颜色都不代表已确认国家队进场。</p>
             </div>
             <article class="card journal-detail" aria-labelledby="journal-title">
               <p class="kicker" id="journal-date"></p>
@@ -178,11 +178,13 @@
               <p class="journal-sentence" id="journal-sentence"></p>
               <div class="journal-metrics" id="journal-metrics"></div>
               <p class="journal-peak" id="journal-peak"></p>
+              <p class="journal-core" id="journal-core"></p>
               <ol class="journal-events" id="journal-events" aria-label="当日信号时段"></ol>
+              <details class="journal-raw"><summary id="journal-raw-title">原始低门槛波动</summary><ol id="journal-raw-list"></ol></details>
               <p class="journal-quality" id="journal-quality"></p>
             </article>
           </div>
-          <p class="journal-foot">相邻命中的15分钟滚动窗口合并为一段。读数时长统计信号连续出现的分钟数，不代表实际买入时长或资金量。每日总结按固定历史基线回放，量价信号无法识别交易账户。</p>
+          <p class="journal-foot">短时异动要求15分钟量价达到1.5×档；持续放量要求同组两个相邻且不重叠的15分钟窗口及其30分钟整体都达到1.5×档。明显、强烈持续分别使用2×、3×档。全池和主力分别核验；这些是待验证的量价规则，不是机构身份或进场概率。</p>
           <p class="calendar-load"><span id="calendar-load-state" role="status">正在读取云端历史…</span><button id="calendar-retry" type="button" hidden>重试</button></p>
         </div>
       </section>
@@ -322,7 +324,8 @@
               <li>五项辅助证据：15分钟放量、15分钟价格同步上行、全天外内盘差占成交 ≥ +3%、加权溢价 ≥ +0.10%、今日指数低于昨收时出现放量拉升。它们展示不同时间范围的背景，命中数不是机构概率，也不直接相加生成强度。主动净买入为成交额 ×（外盘量 − 内盘量）÷（外盘量 + 内盘量），方向受套利、对冲与撮合口径影响。</li>
               <li>历史 5 分钟线与日线由 GitHub Actions 从东方财富采集并部署为同源快照，收盘后校对；快照只作为分母与断线兜底，盘中数字以浏览器直连的实时行情为准。</li>
               <li>所有指标均为公开行情的量价推断。交易账户身份、真实申购赎回与机构持仓以基金定期报告与独立披露为准。本页不构成投资建议。</li>
-              <li>上班日历按真实逐分钟数据回放15分钟主信号，使用当日之前最多20个完整交易日的五分钟基线并线性插值，排除未来数据。颜色为当日最高级别，5分钟提醒不提升日历级别。完整收盘归档需主力203个有效读数齐全且分时到达15:00；盘中与缺口分别标注，不将缺失写成零信号。信号读数时长为相邻滚动窗口命中的分钟数，并非真实下单持续时间。近期可用的5个交易日先回补，此后由GitHub Actions持续归档到独立数据分支，网页关闭也可积累；较早空白日期不作推断。</li>
+              <li>量价日历使用独立日级分类（daily-persistence-v2）：未达1.5×档的波动记为常态；达到1.5×档但未通过持续性核对的记为短时异动。同一组两个相邻且不重叠的15分钟窗口，以及覆盖它们的30分钟整体，均通过相应量价档位才记为持续放量（1.5×）、明显持续（2×）或强烈持续（3×）。全池与主力四只各自核对，不能跨组拼接；同组各窗口仍须满足对应成交额、涨幅和上涨家数门槛。日级标签不再取全天203个滚动窗口的最大值；原始1.2×低门槛记录保留供核验，不能视为国家队进场。规则未经机构身份标注样本校准，不承诺误报率。</li>
+              <li>日历按真实逐分钟回放，分母只用当日前最多20个完整历史日并线性插值。完整收盘归档需主力203个有效读数齐全且分时到达15:00；盘中和覆盖不全分别标注。历史证据持久保存在activity-data分支，规则更新后从冻结分钟和基线重算，原始证据保留；缺失日期不推断。</li>
             </ul>
             <div class="sources">
               <a href="https://gu.qq.com/sh510300" target="_blank" rel="noopener noreferrer">腾讯财经行情 ↗</a>

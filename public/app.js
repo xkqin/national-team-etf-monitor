@@ -14,9 +14,9 @@ import {
   tradingMinute,
   LIVE_MIN_MINUTE,
   minuteFeedMode,
-} from "./core.js?v=20261117a";
+} from "./core.js?v=20261117b";
 import { createMinuteFetcher, tencentDays, trendDays } from "./minute-source.js?v=20261113b";
-import { createJournal } from "./journal-ui.js?v=20261117a";
+import { createJournal } from "./journal-ui.js?v=20261117b";
 
 const journal = createJournal();
 
